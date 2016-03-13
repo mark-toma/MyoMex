@@ -9,21 +9,13 @@ Thalmic Labs' Myo Gesture Control Armband (myo.com) features an Inertial Measure
 
 On the surface, this package contains a simplified m-code class, MyoMex, that enables MATLAB users to stream data from Myo at up to 50Hz with as few as 4 commands:
 
-`
-m = MyoMex();
-
-m.startStreaming(); 
-
-% Data is now being pushed into log properties named, 
-
-% quat_log, gyro_log, accel_log, emg_log, etc. 
-
-% Data acquisition is non-blocking, too! 
-
-m.stopStreaming(); 
-
-m.delete();
-`
+    m = MyoMex();
+    m.startStreaming(); 
+    % Data is now being pushed into log properties named, 
+    % quat_log, gyro_log, accel_log, emg_log, etc. 
+    % Data acquisition is non-blocking, too! 
+    m.stopStreaming(); 
+    m.delete();
 
 The IMU data includes estimated quaternion (orientation), three-axis gyroscope (angular velocity), and three-axis accelerometer (linear acceleration).
 
