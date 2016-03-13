@@ -1,0 +1,74 @@
+function build_myo_mex(sdk_path)
+%BUILD_MYO_MEX(SDK_PATH) - Builds myo_mex
+%   This functions builds the mex function myo_mex against the Windows
+%   Myo SDK with root directory located at sdk_path.
+%
+%   Currently, only Windows is supported in this script and the source code
+%   myo_mex.cpp has Win API dependencies.
+
+
+lib_name = get_lib_name(); % decides on myo32 or myo64 from computer arch
+
+inc_path = fullfile(sdk_path,'include');
+lib_path = fullfile(sdk_path,'lib');
+if ~exist(sdk_path,'dir')
+  error('sdk_path = ''%s'' is not a valid directory.',sdk_path);
+elseif ~exist(inc_path,'dir')
+  error('sdk_path = ''%s'' does not contain subdirectory ''%s''',sdk_path,'include');
+elseif ~exist(lib_path,'dir')
+  error('sdk_path = ''%s'' does not contain subdirectory ''%s''',sdk_path,'lib');
+end
+
+% source file
+src_file = 'myo_mex.cpp';
+
+% mex command (add ' -v -g' switches for verbose output and debug symbols)
+cmd = sprintf('mex -I"%s" -L"%s" -l%s %s',...
+  inc_path,lib_path,lib_name,src_file);
+
+cur_path = pwd;
+bld_path = fileparts(mfilename('fullpath'));
+
+if ~strcmp(bld_path,cur_path)
+  fprintf('\nChanging directory to build directory:\n\t''%s''\n',bld_path);
+  cd(bld_path);
+end
+
+% build
+fprintf('\nEvaluating mex command:\n\t''%s''\n',cmd);
+try
+  eval(cmd);
+catch err
+  % cd back to original path
+  if ~strcmp(bld_path,cur_path)
+    fprintf('\nChanging directory to original directory:\n\t''%s''\n',bld_path);
+    cd(cur_path);
+  end
+  fprintf('\nChanging directory to build directory:\n\t''%s''\n',bld_path);
+  throw(err);
+end
+
+% cd back to original path
+if ~strcmp(bld_path,cur_path)
+  fprintf('\nChanging directory to original directory:\n\t''%s''\n',bld_path);
+  cd(cur_path);
+end
+
+fprintf('\nMEX-file ''myo_mex'' built successfully!\n\n');
+
+end
+
+
+% infer lib variant from computer architecture (i.e. 32 or 64 bit)
+% only windows is supported currently
+function name = get_lib_name()
+if ispc
+  if strcmp('win64',computer('arch'))
+    name = 'myo64';
+  else
+    name = 'myo32';
+  end
+else
+  error('build_myo_mex only supports windows pc');
+end
+end
