@@ -56,10 +56,10 @@ unsigned __stdcall runThreadFunc( void* pArguments ) {
   while ( isStreaming ) { // unset isStreaming to terminate thread
     
     pHub->run(streaming_time); // run callbacks to collector
-    const Frame &f1 = collector.getFrame(1);
     unsigned num_myos = collector.getMyoCount();
-    // f2 might be invalid... if
+    const Frame &f1 = collector.getFrame(1);
     const Frame &f2 = collector.getFrame(2);
+    // f2 might be invalid... if
     
     // acquire lock then write data into queue
     DWORD dwWaitResult;
@@ -69,9 +69,7 @@ unsigned __stdcall runThreadFunc( void* pArguments ) {
       case WAIT_OBJECT_0: // The thread got ownership of the mutex
         __try {
           frameLog1.push(f1); // write to queue
-          if (num_myos>1) {
-            frameLog2.push(f2);
-          }
+          if (num_myos>1) { frameLog2.push(f2); }
         }
         __finally {
           if (! ReleaseMutex(hMutex)) // release lock
@@ -143,7 +141,7 @@ void assn_output_data_struct(mxArray *dst, mxArray *d[], int id) {
   
   int ii = 0;
   for (ii;ii<NUM_FIELDS;ii++) {
-    mxSetFieldByNumber(dst,id,ii,d[ii]);
+    mxSetFieldByNumber(dst,id-1,ii,d[ii]);
   }
 }
 
@@ -184,7 +182,6 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     mexLock();
     
     //Sleep(INIT_DELAY); // wait briefly for Myo to come up
-    
     pHub->run(INIT_DELAY);
     
     mexPrintf("Number of Myos = %d",collector.getMyoCount());
@@ -207,12 +204,12 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     
     make_output_data(outData1,1); // allocate output data and assign size
     fill_output_data_row(f1,outData1,0,1); // assign data frame to outputs
-    assn_output_data_struct(plhs[DATA_STRUCT_OUT_NUM], outData1, 0);
+    assn_output_data_struct(plhs[DATA_STRUCT_OUT_NUM], outData1, 1);
     
     if (num_myos>1) {
-      make_output_data(outData1,2); // allocate output data and assign size
+      make_output_data(outData2,1); // allocate output data and assign size
       fill_output_data_row(f2,outData2,0,1); // assign data frame to outputs
-      assn_output_data_struct(plhs[DATA_STRUCT_OUT_NUM], outData2, 0);
+      assn_output_data_struct(plhs[DATA_STRUCT_OUT_NUM], outData2, 2);
     }
     
   } else if ( !strcmp("set_streaming_time",cmd) ) {
@@ -270,6 +267,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     if ( !isStreaming && frameLog1.empty() && frameLog2.empty() )
       mexErrMsgTxt("myo_mex is not streaming and the queue is empty.\n");
     
+    unsigned int ii;
     unsigned num_myos = collector.getMyoCount();
     unsigned int sz1 = frameLog1.size();
     unsigned int sz2 = frameLog2.size();
@@ -278,11 +276,10 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     mxArray *outData2[NUM_FIELDS];
     // create a (1xnum_myos) output struct as first output argument
     plhs[DATA_STRUCT_OUT_NUM] = mxCreateStructMatrix(1,num_myos,NUM_FIELDS,output_fields);
-    
-    
+        
     // drain frameLog1
     make_output_data(outData1,sz1);
-    unsigned int ii = 0;
+    ii = 0;
     while ( !frameLog1.empty() && (ii < sz1) ) {
       
       Frame f;
@@ -314,7 +311,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       
       ii++;
     }
-    assn_output_data_struct(plhs[DATA_STRUCT_OUT_NUM], outData1, 0);
+    assn_output_data_struct(plhs[DATA_STRUCT_OUT_NUM], outData1, 1);
     
     // conditionally drain frameLog2
     if (num_myos>1) {
@@ -351,7 +348,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
         
         ii++;
       }
-      assn_output_data_struct(plhs[DATA_STRUCT_OUT_NUM], outData2, 1);
+      assn_output_data_struct(plhs[DATA_STRUCT_OUT_NUM], outData2, 2);
     }
         
   } else if ( !strcmp("stop_streaming",cmd) ) {
