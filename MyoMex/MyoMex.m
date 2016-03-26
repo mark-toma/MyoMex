@@ -430,10 +430,27 @@ classdef MyoMex < handle
       %   recommended) to call this method. There is a MATLAB timer set up
       %   to do that for you!
       if m.is_streaming
-        [fail,emsg,s,q,g,a,e,p,u,o] = m.myo_mex_get_streaming_data();
+        [fail,emsg,data] = m.myo_mex_get_streaming_data();
       else
-        [fail,emsg,s,q,g,a,e,p,u,o] = m.myo_mex_get_polling_data();
+        [fail,emsg,data] = m.myo_mex_get_polling_data();
       end
+      
+      % print number of myos
+      fprintf('Received data for %d devices.\n',length(data));
+      
+      
+      % for now, hard code data access for the first myo only
+      % that is, ignore the possibility for a second myo
+      id = 1;
+      s = data(id).size;
+      q = data(id).quat;
+      g = data(id).gyro;
+      a = data(id).accel;
+      e = data(id).emg;
+      p = data(id).pose;
+      u = data(id).is_unlocked;
+      o = data(id).on_arm;
+      
       
       if fail, return; end
       if s<1, return; end % bail is empty data
@@ -637,11 +654,11 @@ classdef MyoMex < handle
       end
     end
     
-    function [fail,emsg,s,q,g,a,e,p,u,o] = myo_mex_get_polling_data()
+    function [fail,emsg,data] = myo_mex_get_polling_data()
       fail = false; emsg = [];
-      s = []; q = []; g = []; a = []; e = []; p = []; o = []; u = [];
+      data = [];
       try 
-        [s,q,g,a,e,p,u,o] = myo_mex('get_polling_data');
+        data = myo_mex('get_polling_data');
       catch err
         fail = true; emsg = err.message;
       end
@@ -656,11 +673,11 @@ classdef MyoMex < handle
       end
     end
     
-    function [fail,emsg,s,q,g,a,e,p,u,o] = myo_mex_get_streaming_data()
+    function [fail,emsg,data] = myo_mex_get_streaming_data()
       fail = false; emsg = [];
-      s = []; q = []; g = []; a = []; e = []; p = []; o = []; u = [];
-      try 
-        [s,q,g,a,e,p,u,o] = myo_mex('get_streaming_data');
+      data = [];
+      try
+        data = myo_mex('get_streaming_data');
       catch err
         fail = true; emsg = err.message;
       end

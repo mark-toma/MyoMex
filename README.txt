@@ -13,6 +13,33 @@ information in the help for MyoMex.
 ###########################################################################
 # CHANGELOG - Release Notes
 
+2016-03-xx 1.2
+  In progress ...
+ 
+  * ISSUE in myo_mex.mex*
+    Currently in active development and UNSTABLE!!!
+    Initializes fine and indicates finding two Myo devices upon first call
+    into myo_mex('init'), but MATLAB crashes with a segv immediately upon 
+    the first call into myo_mex('get_polling_data'). There's some bug that
+    I'm too tired to find right now. Note that before updating myo_mex.cpp
+    with support for the second Myo device, all of the functionality of
+    MyoMex tested fine.
+  * CHANGE in myo_mex.cpp
+    Encapsulated same data matrix outputs into single MATLAB struct (i.e. 
+    per Myo device) in preparation for multi-Myo support.
+  * CHANGE in myo_mex.cpp
+    Added FrameLog deque to store data for a second myo device. Updated
+    existing functionality to support two (of multiple) Myo devices.
+  * CHANGE in myo_class.hpp
+    Added support for multiple Myo devices by vecotrizing all member
+    variables. Added member functions to query Myo count, lookup Myo id,
+    and parameterized getFrame on the Myo id.
+  * CHANGE in MyoMex.m
+    Updated methods getData(), myo_mex_get_polling_data(), and 
+    myo_mex_get_streaming_data() to accept a single structure output from
+    myo_mex('get_*_data'). A few extra lines glue the fields of the first
+    element of this struct to the variables used previously.
+
 2016-03-12 1.1
   Some new features in MyoMex (no changes to myo_mex) and a slew of 
   modifications to the example GUI. The myo_mex build has also been tested 
