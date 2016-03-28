@@ -39,6 +39,8 @@ const char* output_fields[] = {"quat","gyro","accel","emg","pose"};
 
 #define INIT_DELAY 1000
 
+#define RESTART_DELAY 500
+        
 // program state
 volatile bool isStreaming = false;
 
@@ -303,6 +305,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     
     collector.addDataEnabled = false; // stop handling data events
     collector.syncDataSources(); // sync data up again (flushes queue)
+    
+    Sleep(RESTART_DELAY);
     
   } else if ( !strcmp("delete",cmd) ) {
     // ----------------------------------------- myo_mex delete -----------

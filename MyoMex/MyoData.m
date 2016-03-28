@@ -8,12 +8,14 @@ classdef MyoData < handle
   
   properties (SetAccess = private)
     
-    time = [];
+    time_imu = [];
     quat = [];
     gyro = [];
     gyro_fixed = [];
     accel = [];
     accel_fixed = [];
+    
+    time_emg = [];
     emg = [];
     pose = [];
     
@@ -24,23 +26,19 @@ classdef MyoData < handle
     pose_fingers_spread;
     pose_double_tap;
     pose_unknown;
-    on_arm = [];
-    is_unlocked = [];
-    which_arm = [];
+    
   end
   
   properties (SetAccess=private,Hidden=true)
-    time_log        = [];
+    time_imu_log        = [];
     quat_log        = [];
     gyro_log        = [];
     gyro_fixed_log  = [];
     accel_log       = [];
     accel_fixed_log = [];
+    time_emg_log    = [];
     emg_log         = [];
     pose_log        = [];
-    is_unlocked_log = [];
-    on_arm_log      = [];
-    
     POSE_NUM_REST           = 0;
     POSE_NUM_FIST           = 1;
     POSE_NUM_WAVE_IN        = 2;
@@ -48,7 +46,6 @@ classdef MyoData < handle
     POSE_NUM_FINGERS_SPREAD = 4;
     POSE_NUM_DOUBLE_TAP     = 5;
     POSE_NUM_UNKNOWN        = 6;
-    
   end
   
   properties (Dependent)
@@ -66,21 +63,11 @@ classdef MyoData < handle
     pose_unknown_log;
   end
   
-  properties (Access=private)
-    
-    streaming_data_init_time;
-    
-    % constants
-    STREAMING_FRAME_TIME_DEF = 0.040; %    40ms =  25Hz
-    STREAMING_FRAME_TIME_MIN = 0.040; %    40ms =  25Hz
-    
-    
-    STREAMING_DATA_TIME_DEF  = 0.040; %   40ms =  25Hz
-    STREAMING_DATA_TIME_MIN  = 0.020; %   20ms =  50Hz
-    STREAMING_DATA_TIME_MAX  = 1.000; % 1000ms =   1Hz
-    
+  properties (Access=private,Hidden=true)
+    IMU_SAMPLE_TIME = 0.020; %  50Hz
+    EMG_SAMPLE_TIME = 0.005; % 200Hz
     EMG_SCALE = 128;
-    
+    RESTART_DELAY = 0.5;
   end
   
   methods
@@ -150,73 +137,84 @@ classdef MyoData < handle
       val = m.pose_log == m.POSE_NUM_UNKNOWN;
     end
     
-    function pushLogs(m,t,q,g,gf,a,af,e,p)
-      m.time_log        = [ m.time_log         ; t ];
-      m.quat_log        = [ m.quat_log         ; q ];
-      m.gyro_log        = [ m.gyro_log         ; g ];
-      m.gyro_fixed_log  = [ m.gyro_fixed_log   ; gf ];
-      m.accel_log       = [ m.accel_log        ; a ];
-      m.accel_fixed_log = [ m.accel_fixed_log  ; af ];
-      m.emg_log         = [ m.emg_log          ; e ];
-      m.pose_log        = [ m.pose_log         ; p ];
-      %m.is_unlocked_log = [ m.is_unlocked_log  ; u ];
-      %m.on_arm_log      = [ m.on_arm_log       ; o ];
+    function pushLogs(m,ti,q,g,gf,a,af,te,e,p)
+      if ~isempty(ti)
+        m.time_imu_log    = [ m.time_imu_log     ; ti ];
+        m.quat_log        = [ m.quat_log         ; q ];
+        m.gyro_log        = [ m.gyro_log         ; g ];
+        m.gyro_fixed_log  = [ m.gyro_fixed_log   ; gf ];
+        m.accel_log       = [ m.accel_log        ; a ];
+        m.accel_fixed_log = [ m.accel_fixed_log  ; af ];
+      end
+      if ~isempty(te)
+        m.time_emg_log    = [ m.time_emg_log     ; te ];
+        m.emg_log         = [ m.emg_log          ; e ];
+        m.pose_log        = [ m.pose_log         ; p ];
+      end
     end
     
     function clearLogs(m)
       % clearLogs  Clears logged data
       %   Sets all <data>_log properties to the empty matrix. Do not call
       %   this method while MyoMex is_streaming.
-      if m.is_streaming
-        warning('MyoMex will not clear logs while streaming.');
-        return;
-      end
-      m.time_log        = [];
+      m.time_imu_log    = [];
       m.quat_log        = [];
       m.gyro_log        = [];
       m.gyro_fixed_log  = [];
       m.accel_log       = [];
       m.accel_fixed_log = [];
+      m.time_emg_log    = [];
       m.emg_log         = [];
       m.pose_log        = [];
-      m.is_unlocked_log = [];
-      m.on_arm_log      = [];
     end
     
-    function addData(m,data,t)
+    function addData(m,data,curr_time)
       % addData  Adds new data
-      % Inputs
-      %   ct
-      %     Current time in MATLAB
-      %   bstream
-      %     Boolean flag representing streaming status
-      %   
       
-      q = data.quat;
-      g = data.gyro;
-      a = data.accel;
-      e = data.emg;
-      p = data.pose;
-      %u = data.is_unlocked;
-      %o = data.on_arm;
-           
-      e = e./m.EMG_SCALE;
-      q = m.qRenorm(q); %renormalize quaterions
+      countIMU = size(data.quat,1);
+      countEMG = size(data.emg,1);
       
-      gf = m.qRot(q,g);
-      af = m.qRot(q,a);
+      ti = m.IMU_SAMPLE_TIME * (1:1:countIMU);
+      if isempty(m.time_imu) || ...
+          ( (curr_time - m.time_imu - T) > m.RESTART_DELAY )
+        % we're too far ahead of the previous logged time, rebase
+        ti = curr_time - ti(end) + ti;
+      else
+        ti = m.time_imu + ti;
+      end
       
-      m.quat = q(end,:);
-      m.gyro = g(end,:);
-      m.gyro_fixed = gf(end,:);
-      m.accel = a(end,:);
-      m.accel_fixed = af(end,:);
-      m.emg = e(end,:);
-      m.pose = p(end,:);
-      %m.is_unlocked = u(end,:);
-      %m.on_arm = o(end,:);
-            
-      m.pushLogs(t,q,g,gf,a,af,e,p); % removed o and u
+      te = m.EMG_SAMPLE_TIME * (1:1:countEMG);
+      if isempty(m.time_emg) || ...
+          ( (curr_time - m.time_emg - T) > m.RESTART_DELAY )
+        % we're too far ahead of the previous logged time, rebase
+        te = curr_time - te(end) + te;
+      else
+        te = m.time_emg + te;
+      end
+      
+      if countIMU > 0
+        q = data.quat;
+        g = data.gyro;
+        a = data.accel;
+        q = m.qRenorm(q); %renormalize quaterions
+        gf = m.qRot(q,g);
+        af = m.qRot(q,a);
+        m.quat = q(end,:);
+        m.gyro = g(end,:);
+        m.gyro_fixed = gf(end,:);
+        m.accel = a(end,:);
+        m.accel_fixed = af(end,:);
+      end
+      
+      if countEMG > 0
+        e = data.emg;
+        p = data.pose;
+        e = e./m.EMG_SCALE; % normalize emg values
+        m.emg = e(end,:);
+        m.pose = p(end,:);
+      end
+      
+      m.pushLogs(ti',q,g,gf,a,af,te',e,p);
       
     end
     
@@ -258,8 +256,8 @@ classdef MyoData < handle
       %   by pre-multiplication of p by q and post-multiplcation by the
       %   inverse of q.
       pq = [zeros(size(p,1),1),p]; % vector quaternion with zero scalar
-      qi = MyoMex.qInv(q);
-      rq = MyoMex.qMult(MyoMex.qMult(q,pq),qi);
+      qi = MyoData.qInv(q);
+      rq = MyoData.qMult(MyoData.qMult(q,pq),qi);
       r = rq(:,2:4);
     end
     function qp = qMult(ql,qr)
