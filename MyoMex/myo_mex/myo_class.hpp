@@ -1,12 +1,21 @@
 
 #ifndef MYO_CLASS_HPP
 #define MYO_CLASS_HPP
-#endif // ndef MYO_CLASS_HPP
+
+// comment the following line to remove debug output via DB_MYO_CLASS()
+//#define DEBUG_MYO_CLASS
+#ifdef DEBUG_MYO_CLASS
+#define DB_MYO_CLASS(fmt, ...) printf(fmt, ##__VA_ARGS__)
+#else
+#define DB_MYO_CLASS(fmt, ...)
+#endif
 
 #include "mex.h"
 #include "myo/myo.hpp"  // myo sdk cpp binding
+
 #include <array>        // myo sdk emg data
 #include <vector>
+#include <queue>
 
 #define POSE_NUM_REST           0
 #define POSE_NUM_FIST           1
@@ -17,239 +26,461 @@
 #define POSE_NUM_UNKNOWN        6
 
 
+// --- Data Frames
+// These structures are used as return types in MyoData and DataCollector
+// methods to return a single sample of data from one time instance
 
-// holds a frame of data from myo collected in a call to hub.run(...)
-struct Frame
+// IMU data frame
+struct FrameIMU
 {
   myo::Quaternion<float> quat;
   myo::Vector3<float> gyro, accel;
-  std::array<int8_t,8> emg;
-  bool onArm, isUnlocked, whichArm;
-  float poseNum;
-};
+}; // FrameIMU
 
+// EMG data frame
+struct FrameEMG
+{
+  std::array<int8_t,8> emg;
+  unsigned int pose;
+}; // FrameEMG
+
+// Meta data frame
+struct FrameMeta
+{
+  bool onArm;
+  bool isUnlocked;
+  bool whichArm;
+}; // FrameMeta
+
+// END Data Frames
+
+
+// --- MyoData
+// This class is used to keep track of the data for one physical Myo.
+// Typical use may be to instantiate a MyoData for each unique myo received
+// by a DataCollector. Then, subsequent calls into add<data> and get<data>
+// can be used to receive contiguous collections of IMU, EMG, and Meta data
+
+class MyoData
+{
+  
+  // Data frames for returning data samples
+  FrameIMU frameIMU;
+  FrameEMG frameEMG;
+  FrameMeta frameMeta;
+  
+  // Pointer to a Myo device instance provided by hub
+  myo::Myo* pMyo;
+  
+  // IMU data queues and state information
+  std::deque<myo::Quaternion<float>> quat;
+  std::deque<myo::Vector3<float>> gyro;
+  std::deque<myo::Vector3<float>> accel;
+  unsigned int countIMU;
+  uint64_t timestampIMU;
+  
+  // EMG data queues and state information
+  std::deque<std::array<int8_t,8>> emg;
+  std::deque<unsigned int> pose;
+  unsigned int countEMG;
+  uint64_t timestampEMG;
+  unsigned int semEMG;
+  
+  // TODO
+  //   Implement Meta data
+  // Meta data queues and state information
+  // ...
+  // ...
+  
+  
+  void syncIMU(uint64_t ts)
+  {
+    if (ts > timestampIMU) {
+      countIMU++;
+      // find mimumum length of IMU data
+      size_t qs = quat.size();
+      size_t gs = gyro.size();
+      size_t as = accel.size();
+      
+      size_t sz = 0;
+      if ( (qs>gs) && (qs>as) ) {
+        sz = qs;
+      } else if ( (gs>qs) && (gs>as) ) {
+        sz = gs;
+      } else {
+        sz = as;
+      }
+      // pad onto IMU data to make them all maximum length
+      while ( quat.size() < sz ) {
+        myo::Quaternion<float> q = quat.back();
+        quat.push_back(q);
+      }
+      while ( gyro.size() < sz ) {
+        myo::Vector3<float> g = gyro.back();
+        gyro.push_back(g);
+      }
+      while ( accel.size() < sz ) {
+        myo::Vector3<float> a = accel.back();
+        accel.push_back(a);
+      }
+    }
+    timestampIMU = ts; // update imu timestamp
+  }
+  
+  // Helper for syncEMG(...,isPoseSync)
+  void syncPose(uint64_t ts)
+  {
+    syncEMG(ts,true);
+  }
+  
+  // Helper for syncEMG(...,isPoseSync)
+  void syncEMG(uint64_t ts)
+  {
+    syncEMG(ts,false);
+  }
+  
+  // This is the real syncEMG to be called by syncEMG helper or syncPose
+  void syncEMG(uint64_t ts, bool isPoseSync)
+  {
+    // if this is the same timestamp, increment sem
+    // it this is a new timestamp, reset sem
+    if ( (ts > timestampEMG) && (semEMG < 1) ) {
+      // we lost a sample... ZOH on the last one
+      std::array<int8_t,8> e = emg.back();
+      emg.push_back(e);
+      semEMG = 0;
+      countEMG++;
+    } else if ( (ts > timestampEMG) && (semEMG > 1) ) {
+      // we had extra suplicate EMG samples...
+      // assume that all emgs come in pairs per time sample so we should
+      // have an even number of consecutive timestamps...
+      if ( 0==(semEMG%2) ) {
+        std::array<int8_t,8> e = emg.back();
+        emg.push_back(e);
+      }
+      semEMG = 0;
+      countEMG++;
+    } else {
+      // everything is okay, no need to fix stuff
+      semEMG++;
+    }
+    // TODO
+    //   prefill _pose to match one more than current length of _emg
+    //fill _pose to one less than _emg.size if isPoseSync
+    //fill _pose to one more than _emg.size if ~isPoseSync
+    size_t sz;
+    if (isPoseSync)
+      sz = emg.size()-1;
+    else
+      sz = emg.size()+1;
+    int p = pose.back();
+    while(pose.size()<sz)
+      pose.push_back(p);
+  }
+  
+public:
+  
+  // Construct a MyoData
+  // The constructor must be passed a single myo::Myo* input argument.
+  MyoData(myo::Myo* myo)
+  : timestampIMU(0), timestampEMG(0), countIMU(1), countEMG(1), semEMG(0)
+  {
+    pMyo = myo; // pointer to myo::Myo
+    
+    // perform some operations on myo to set it up before subsequent use
+    pMyo->setStreamEmg(myo::Myo::streamEmgEnabled);
+    pMyo->unlock(myo::Myo::unlockHold);
+    
+    // fill up the other private members
+    myo::Quaternion<float> q; // dummy default objects
+    myo::Vector3<float> g;
+    myo::Vector3<float> a;
+    std::array<int8_t,8> e;
+    quat.push_back(q);        // push them back onto queues
+    gyro.push_back(g);
+    accel.push_back(a);
+    emg.push_back(e);
+    pose.push_back(POSE_NUM_UNKNOWN);
+  }
+  
+  // Myo is owned by hub... no cleanup necessary here
+  ~MyoData() {}
+  
+  
+  FrameIMU &getFrameIMU()
+  {
+    DB_MYO_CLASS("getFrameIMU\count: %d - 1 = ",countIMU);
+    countIMU = countIMU - 1;
+    DB_MYO_CLASS("%d\n",countIMU);
+    frameIMU.quat        = quat.front();
+    frameIMU.gyro        = gyro.front();
+    frameIMU.accel       = accel.front();
+    quat.pop_front();
+    gyro.pop_front();
+    accel.pop_front();
+    return frameIMU;
+  }
+  
+  
+  FrameEMG &getFrameEMG()
+  {
+    countEMG = countEMG - 1;
+    frameEMG.emg  = emg.front();
+    frameEMG.pose = pose.front();
+    emg.pop_front();
+    pose.pop_front();
+    return frameEMG;
+  }
+  
+  // TODO
+  //   Implement getFrameMeta()
+  //  const FrameMeta &getFrameMeta()
+  //  {
+  // // assign frameMeta
+  // return frameMeta;
+  // }
+  
+  
+  myo::Myo* getInstance() { return pMyo; }
+  
+  
+  unsigned int getCountIMU() { return countIMU; }
+  
+  
+  unsigned int getCountEMG() { return countEMG; }
+  
+  // pop_front on all queues until size==1
+  void syncDataSources()
+  {
+    FrameIMU frameIMU;
+    while ( getCountIMU() > 1 )
+      frameIMU = getFrameIMU();
+    FrameEMG frameEMG;
+    while ( getCountEMG() > 1 )
+      frameEMG = getFrameEMG();  
+  }
+  
+  
+  void addQuat(const myo::Quaternion<float>& _quat, uint64_t timestamp)
+  {
+    syncIMU(timestamp);
+    quat.push_back(_quat);
+  }
+  
+  
+  void addGyro(const myo::Vector3<float>& _gyro, uint64_t timestamp)
+  {
+    syncIMU(timestamp);
+    gyro.push_back(_gyro);
+  }
+  
+  
+  void addAccel(const myo::Vector3<float>& _accel, uint64_t timestamp)
+  {
+    syncIMU(timestamp);
+    accel.push_back(_accel);
+  }
+  
+  
+  void addEmg(const int8_t  *_emg, uint64_t timestamp)
+  {
+    syncEMG(timestamp);
+    std::array<int8_t,8> tmp;
+    int ii = 0;
+    for (ii;ii<8;ii++) {tmp[ii]=_emg[ii];}
+    emg.push_back(tmp);
+  }
+  
+  
+  void addPose(myo::Pose _pose, uint64_t timestamp)
+  {
+    syncPose(timestamp);
+    pose.push_back(lookupPose(_pose));
+  }
+  
+  // Utility to lookup pose number from myo::Pose
+  static unsigned int lookupPose(myo::Pose _pose)
+  {
+    switch (_pose.type())
+    {
+      case myo::Pose::unknown :
+        return POSE_NUM_UNKNOWN;
+      case myo::Pose::rest :
+        return POSE_NUM_REST;
+      case myo::Pose::fist :
+        return POSE_NUM_FIST;
+      case myo::Pose::waveIn :
+        return POSE_NUM_WAVE_IN;
+      case myo::Pose::waveOut :
+        return POSE_NUM_WAVE_OUT;
+      case myo::Pose::fingersSpread :
+        return POSE_NUM_FINGERS_SPREAD;
+      case myo::Pose::doubleTap :
+        return POSE_NUM_DOUBLE_TAP;
+      default :
+        return 42;
+    }
+  }
+  
+}; // MyoData
+
+// END MyoData
+
+
+// --- DataCollector
 // implementation of object used to grab data from myo sdk api
 // this class is registered with the hub and its member functions are
 // called during hub.run(...) with relevant myo data
 class DataCollector : public myo::DeviceListener
 {
-public:
-  std::vector<Frame> frame;
   
-  std::vector<myo::Quaternion<float>> quat;
-  std::vector<myo::Vector3<float>> gyro;
-  std::vector<myo::Vector3<float>> accel;
-  std::vector<std::array<int8_t,8>> emg;
-  std::vector<float> poseNum;
-  std::vector<bool> isUnlocked;
-  std::vector<bool> onArm;
-  std::vector<myo::Myo*> knownMyos;
+  std::vector<MyoData*> knownMyos;
+  
+public:
+  
+  bool addDataEnabled;
   
   DataCollector()
-  /*: quat(), gyro(), accel(), emg(), poseNum(POSE_NUM_UNKNOWN),
-   * isUnlocked(true), onArm(false)*/
+  : addDataEnabled(false)
   {
-    
   }
+  
   
   ~DataCollector()
   {
+    // destruct all MyoData* in knownMyos
+    int ii=0;
+    for (ii;ii<knownMyos.size();ii++)
+    {
+      delete knownMyos[ii];
+    }
   }
   
-  // get current data frame
-  // this should be called after hub.run(...) to get current data
-  const Frame &getFrame ( int id )
+  
+  unsigned int getCountIMU(int id) { return knownMyos[id-1]->getCountIMU(); }
+  
+  
+  unsigned int getCountEMG(int id) { return knownMyos[id-1]->getCountEMG(); }
+  
+  
+  const FrameIMU &getFrameIMU( int id ) { return knownMyos[id-1]->getFrameIMU(); }
+  
+  
+  const FrameEMG &getFrameEMG( int id ) { return knownMyos[id-1]->getFrameEMG(); }
+  
+  // TODO
+  //   Implement getFrame() in MyoData
+  // const FrameMeta &getFrameMeta( int id ) { return knownMyos[id-1]->getFrameMeta(); }
+  
+  void syncDataSources()
   {
-    
-    //mexPrintf("getFrame()\n");
-    
-    // another workaround... return the wrong frame if id is bad and a 
-    // proper frame exists
-    if (id>getMyoCount()) { id = getMyoCount(); } // basically truncate id
-    
-    frame[id-1].quat        = quat[id-1];
-    frame[id-1].gyro        = gyro[id-1];
-    frame[id-1].accel       = accel[id-1];
-    frame[id-1].emg         = emg[id-1];
-    frame[id-1].poseNum     = poseNum[id-1];
-    frame[id-1].isUnlocked  = isUnlocked[id-1];
-    frame[id-1].onArm       = onArm[id-1];
-    return frame[id-1];
+    int ii = 0;
+    for (ii;ii<knownMyos.size();ii++)
+      knownMyos[ii]->syncDataSources();
   }
+  
   
   // get current number of myos
-  const size_t getMyoCount() {
-    //mexPrintf("getMyoCount()\n");
+  const unsigned int getCountMyos() { return knownMyos.size(); }
+  
+  
+  const unsigned int getMyoID(myo::Myo* myo)
+  {
+    // search myos in knownMyos for myo
+    for (size_t ii = 0; ii < knownMyos.size(); ii++)
+      if (knownMyos[ii]->getInstance() == myo) { return ii+1; }
+    
+    // add myo to a new MyoData* in knowmMyos if it doesn't exist yet
+    knownMyos.push_back(new MyoData(myo));
     return knownMyos.size();
   }
   
-  const size_t getMyoID(myo::Myo* myo) {
-    //mexPrintf("getMyoID()\tcount = %d\n",getMyoCount());
-    
-    for (size_t i = 0; i < knownMyos.size(); ++i) {
-      // If two Myo pointers compare equal, they refer to the same Myo device.
-      if (knownMyos[i] == myo) { return i+1; }
-    }
-    
-    // here there's no ID for this myo yet
-    // let's make one
-    addMyo(myo); // pushes this myo onto knownMyos
-    return knownMyos.size();
-    
-  }
-  
-  void addMyo(myo::Myo* myo) {
-    
-    // add myo pointer to knownMyos
-    // get the myo index later with getMyoID(myo)
-    knownMyos.push_back(myo);
-    
-    // pushback in other data members too
-    Frame f;
-    myo::Quaternion<float> q;
-    myo::Vector3<float> g;
-    myo::Vector3<float> a;
-    std::array<int8_t,8> e;
-    float p = POSE_NUM_UNKNOWN;
-    bool u = false;
-    bool o = false;
-    
-    frame.push_back(f);
-    quat.push_back(q);
-    gyro.push_back(g);
-    accel.push_back(a);
-    emg.push_back(e);
-    poseNum.push_back(p);
-    isUnlocked.push_back(u);
-    onArm.push_back(o);
-    
-  }
   
   void onPair(myo::Myo* myo, uint64_t timestamp, myo::FirmwareVersion firmwareVersion)
   {
-    //mexPrintf("onPair()\n");
-
-    addMyo(myo);
-    
+    if (!getMyoID(myo)) mexErrMsgTxt("Failed to add Myo\n");
   }
   
   // onUnpair() is called whenever the Myo is disconnected from Myo Connect by the user.
   void onUnpair(myo::Myo* myo, uint64_t timestamp)
   {
     // TODO: we should probably pop this myo out of the datas...
-    
-    /*
-     * // reset data state
-     * const myo::Quaternion<float> quatIdentity;
-     * quat = quatIdentity; // set quat to identity
-     * emg.fill(0);
-     * isUnlocked = false;
-     * onArm = false;
-     * poseNum = POSE_NUM_UNKNOWN;
-     */
   }
   
-  // onOrientationData() is called whenever the Myo device provides its current orientation, which is represented
-  // as a unit quaternion.
-  void onOrientationData(myo::Myo* myo, uint64_t timestamp, const myo::Quaternion<float>& q)
+  
+  void onConnect(myo::Myo *myo, uint64_t timestamp, myo::FirmwareVersion firmwareVersion)
   {
-    size_t id = getMyoID(myo);
-    if (id == 0) { return; }
-    
-    quat[id-1] = q;
+    myo->setStreamEmg(myo::Myo::streamEmgEnabled);
+    if (!getMyoID(myo)) mexErrMsgTxt("Failed to add Myo\n");
   }
   
-  // onPose() is called whenever the Myo detects that the person wearing it has changed their pose, for example,
-  // making a fist, or not making a fist anymore.
-  void onPose(myo::Myo* myo, uint64_t timestamp, myo::Pose pose)
+  
+  void onDisconnect(myo::Myo* myo, uint64_t timestamp)
   {
-    size_t id = getMyoID(myo);
-    if (id == 0) { return; }
-        
-    float p;
-    switch (pose.type()) {
-      case myo::Pose::unknown :
-        p = POSE_NUM_UNKNOWN;
-      case myo::Pose::rest :
-        p = POSE_NUM_REST;
-        break;
-      case myo::Pose::fist :
-        p = POSE_NUM_FIST;
-        break;
-      case myo::Pose::waveIn :
-        p = POSE_NUM_WAVE_IN;
-        break;
-      case myo::Pose::waveOut :
-        p = POSE_NUM_WAVE_OUT;
-        break;
-      case myo::Pose::fingersSpread :
-        p = POSE_NUM_FINGERS_SPREAD;
-        break;
-      case myo::Pose::doubleTap :
-        p = POSE_NUM_DOUBLE_TAP;
-        break;
-    }
-    
-    poseNum[id-1] = p;
+    // TODO
+    //   Remove from knownMyos
   }
   
-  // onArmSync() is called whenever Myo has recognized a Sync Gesture after someone has put it on their
-  // arm. This lets Myo know which arm it's on and which way it's facing.
+  
+  void onOrientationData(myo::Myo* myo, uint64_t ts, const myo::Quaternion<float>& q)
+  {
+    if (!addDataEnabled) { return; }
+    knownMyos[getMyoID(myo)-1]->addQuat(q,ts);
+  }
+  
+  
+  void onGyroscopeData (myo::Myo* myo, uint64_t ts, const myo::Vector3<float>& g)
+  {
+    if (!addDataEnabled) { return; }
+    knownMyos[getMyoID(myo)-1]->addGyro(g,ts);
+  }
+  
+  
+  void onAccelerometerData (myo::Myo* myo, uint64_t ts, const myo::Vector3<float>& a)
+  {
+    if (!addDataEnabled) { return; }
+    knownMyos[getMyoID(myo)-1]->addAccel(a,ts);
+  }
+  
+  
+  void onEmgData(myo::Myo* myo, uint64_t ts, const int8_t  *e)
+  {
+    if (!addDataEnabled) { return; }
+    knownMyos[getMyoID(myo)-1]->addEmg(e,ts);
+  }
+  
+  
+  void onPose(myo::Myo* myo, uint64_t ts, myo::Pose p)
+  {
+    if (!addDataEnabled) { return; }
+    knownMyos[getMyoID(myo)-1]->addPose(p,ts);
+  }
+  
+  
   void onArmSync(myo::Myo* myo, uint64_t timestamp, myo::Arm arm, myo::XDirection xDirection)
   {
-    size_t id = getMyoID(myo);
-    if (id == 0) { return; }
-    
-    onArm[id-1] = true;
   }
   
-  // onArmUnsync() is called whenever Myo has detected that it was moved from a stable position on a person's arm after
-  // it recognized the arm. Typically this happens when someone takes Myo off of their arm, but it can also happen
-  // when Myo is moved around on the arm.
+  
   void onArmUnsync(myo::Myo* myo, uint64_t timestamp)
   {
-    size_t id = getMyoID(myo);
-    if (id == 0) { return; }
-    
-    onArm[id-1] = false;
   }
   
-  // onUnlock() is called whenever Myo has become unlocked, and will start delivering pose events.
+  
   void onUnlock(myo::Myo* myo, uint64_t timestamp)
   {
-    size_t id = getMyoID(myo);
-    if (id == 0) { return; }
-    
-    isUnlocked[id-1] = true;
   }
+  
+  
   void onLock(myo::Myo* myo, uint64_t timestamp)
   {
-    size_t id = getMyoID(myo);
-    if (id == 0) { return; }
-    
-    isUnlocked[id-1] = false;
-  }
-  void onEmgData(myo::Myo* myo, uint64_t timestamp, const int8_t  *e)
-  {
-    size_t id = getMyoID(myo);
-    if (id == 0) { return; }
-    
-    for (int i = 0; i < 8; i++)
-      emg[id-1][i] = e[i];
-  }
-  void onAccelerometerData (myo::Myo* myo, uint64_t timestamp, const myo::Vector3<float>& a)
-  {
-    size_t id = getMyoID(myo);
-    if (id == 0) { return; }
-    
-    accel[id-1]=a;
-  }
-  void onGyroscopeData (myo::Myo* myo, uint64_t timestamp, const myo::Vector3<float>& g)
-  {
-    size_t id = getMyoID(myo);
-    if (id == 0) { return; }
-    
-    gyro[id-1]=g;
+    // shamelessly unlock the device
+    myo->unlock(myo::Myo::unlockHold);
   }
   
 }; // DataCollector
+
+// END DataCollector
+
+
+#endif // ndef MYO_CLASS_HPP
