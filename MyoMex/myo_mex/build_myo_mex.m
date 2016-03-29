@@ -5,7 +5,20 @@ function build_myo_mex(sdk_path)
 %
 %   Currently, only Windows is supported in this script and the source code
 %   myo_mex.cpp has Win API dependencies.
+%
+% Usage:
+%
+%   sdk_path = fullfile('c:','path','to','sdk','root');
+%   build_myo_mex(sdk_path)
+%
+%   build_myo_mex c:\myo-sdk-win-0.9.0
+%
+%   build_myo_mex default % same as above (hardcoded path)
+%   
 
+if strcmp('default',sdk_path)
+  sdk_path = 'c:\myo-sdk-win-0.9.0';
+end
 
 lib_name = get_lib_name(); % decides on myo32 or myo64 from computer arch
 
@@ -23,7 +36,7 @@ end
 src_file = 'myo_mex.cpp';
 
 % mex command (add ' -v -g' switches for verbose output and debug symbols)
-cmd = sprintf('mex -I"%s" -L"%s" -l%s %s',...
+cmd = sprintf('mex -O -I"%s" -L"%s" -l%s %s',...
   inc_path,lib_path,lib_name,src_file);
 
 cur_path = pwd;

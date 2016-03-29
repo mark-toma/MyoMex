@@ -84,7 +84,7 @@ classdef MyoMex < handle
   end
   
   properties (Dependent)
-
+    
   end
   properties (Dependent,Hidden=true)
     curr_time;
@@ -130,6 +130,7 @@ classdef MyoMex < handle
       end
       
       if data~=num_myos
+        m.myo_mex_delete;
         error('MyoMex failed to initialize %d Myos. myo_mex initialized to %d Myos instead.',...
           num_myos,data);
       end
@@ -143,6 +144,7 @@ classdef MyoMex < handle
       % at this point, myo_mex should be alive!
       m.now_init = now;
       
+      m.startStreaming();
     end
     
     
@@ -154,14 +156,18 @@ classdef MyoMex < handle
       %   constructor attempts to brute-force myo_mex unlocked), the
       %   command window fill up with warning text to indicate that
       %   something's not quite right.
+      m.stopStreaming();
       [fail,emsg] = m.myo_mex_delete;
+      m.myo_mex_clear();
       if fail
         error('myo_mex delete failed with message:\n\t''%s''',emsg);
       end
-      m.myo_mex_clear();
     end
     
-        
+  end
+  
+  methods (Access=private,Hidden=true)
+    
     %% --- Streaming
     function startStreaming(m)
       % startStreaming  Start streaming data
@@ -217,16 +223,14 @@ classdef MyoMex < handle
       
     end
     
-  end
-  
-  methods (Access=private,Hidden=true)
     
     function timerStreamingDataCallback(m,~,~)
       
       [fail,emsg,data] = m.myo_mex_get_streaming_data();
-            
+      
       % bail if getting data failed
       if fail, return; end
+      
       
       % Then push addData to all existing
       for ii=1:length(data)
@@ -234,14 +238,14 @@ classdef MyoMex < handle
       end
       
     end
-        
+    
   end
   
   %% --- Wrappers for myo_mex Interface
   % MEX-file implementation wrapped up in static methods for simpler syntax
   % in writing the class above... I was having a bunch of trouble writing
   % the single quotes
-  methods (Access=private,Static=true,Hidden=true)
+  methods (Static=true,Access=private,Hidden=true)
     
     function [fail,emsg,data] = myo_mex_init()
       fail = false; emsg = [];

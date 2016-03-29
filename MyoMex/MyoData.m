@@ -165,7 +165,7 @@ classdef MyoData < handle
     function addDataIMU(m,data)
 %       data
       if isempty(data.quat), return; end
-      t = data.timeIMU;
+      t = zeros(size(data.quat,1),1);
       q = data.quat;
       g = data.gyro;
       a = data.accel;
@@ -183,10 +183,10 @@ classdef MyoData < handle
     
     
     function addDataEMG(m,data)
-      if isempty(data.timeEMG), return; end
-      t = data.timeEMG;
+      if isempty(data.emg), return; end
+      t = zeros(size(data.emg,1),1);
       e = data.emg;
-      p = data.pose;
+      p = zeros(size(data.emg,1),1);
       e = e./m.EMG_SCALE; % normalize emg values
       m.timeEMG = t(end,:);
       m.emg = e(end,:);
