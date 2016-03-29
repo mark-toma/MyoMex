@@ -81,8 +81,6 @@ classdef MyoMex < handle
     %   startStreaming() and unset by stopStreaming(). If is_streaming is
     %   set then the only valid method call is to stopStreaming().
     is_streaming = false;
-    % num_myos  Number of Myos that have been connected this session
-    num_myos = 0;
   end
   
   properties (Dependent)
@@ -101,9 +99,15 @@ classdef MyoMex < handle
   methods
     
     %% --- Object Management
-    function m = MyoMex()
+    function m = MyoMex(num_myos)
       % MyoMex  Construct a MyoMex object.
-            
+      
+      if nargin<1
+        num_myos = 1;
+      elseif ~any(num_myos==[1,2])
+        error('MyoMex only supports 1 or 2 Myo devices.');
+      end
+      
       % we depend on finding resources in the root directory for this class
       class_root_path = fileparts(mfilename('fullpath'));
       % check that myo_mex exists as a mex file in the expected location
@@ -117,12 +121,23 @@ classdef MyoMex < handle
         error('MyoMex failed to initialize because myo_mex_assert_ready_to_init() could not bring myo_mex into a known unlocked state with failure message:\n\t''%s''',err.message);
       end
       
-      [fail,emsg] = m.myo_mex_init;
+      [fail,emsg,data] = m.myo_mex_init;
       if fail
         if strcmp(emsg,'Myo failed to init!') % extra hint
           warning('Myo will fail to init if it is not connected to your system via Myo Connect.');
         end
         error('MEX-file ''myo_mex'' failed to initialize with error:\n\t''%s''',emsg);
+      end
+      
+      if data~=num_myos
+        error('MyoMex failed to initialize %d Myos. myo_mex initialized to %d Myos instead.',...
+          num_myos,data);
+      end
+      
+      if num_myos==1
+        m.myo_data = MyoData;
+      elseif num_myos==2
+        m.myo_data = [MyoData,MyoData];
       end
       
       % at this point, myo_mex should be alive!
@@ -146,16 +161,7 @@ classdef MyoMex < handle
       m.myo_mex_clear();
     end
     
-    %% --- Getters
-    function val = get.num_myos(m)
-      val = length(m.myo_data);
-    end
-    
-    
-    function val = get.curr_time(m)
-      val = (now-m.now_init)*24*60*60; % seconds since init
-    end
-    
+        
     %% --- Streaming
     function startStreaming(m)
       % startStreaming  Start streaming data
@@ -222,10 +228,9 @@ classdef MyoMex < handle
       % bail if getting data failed
       if fail, return; end
       
-      curr_time = m.curr_time;
       % Then push addData to all existing
       for ii=1:length(data)
-        m.myo_data(ii).addData(data(ii),curr_time);
+        m.myo_data(ii).addData(data(ii));
       end
       
     end
@@ -238,10 +243,11 @@ classdef MyoMex < handle
   % the single quotes
   methods (Access=private,Static=true,Hidden=true)
     
-    function [fail,emsg] = myo_mex_init()
+    function [fail,emsg,data] = myo_mex_init()
       fail = false; emsg = [];
+      data = [];
       try
-        myo_mex('init');
+        data = myo_mex('init');
       catch err
         fail = true; emsg = err.message;
       end

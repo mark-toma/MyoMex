@@ -1,15 +1,15 @@
 %% MyoMex_work.m
 
-mm = MyoMex();
+mm = MyoMex(1);
 
 tic;
 mm.startStreaming();
-pause(20);
+pause(5);
 mm.stopStreaming();
 T = toc;
 
 m1 = mm.myo_data(1);
-m2 = mm.myo_data(2);
+% m2 = mm.myo_data(2);
 
 mm.delete();
 clear mm;
@@ -31,6 +31,18 @@ plot(m1.emg_log);
 subplot(2,1,2);
 plot(m1.pose_log);
 
+nDivs = 30;
+figure;
+subplot(2,1,1);
+hist(diff(m1.timeIMU_log(2:end)),nDivs);
+subplot(2,1,2);
+hist(diff(m1.timeEMG_log(2:end)),nDivs);
+
+
+
+
+
+%%
 figure;
 subplot(3,1,1);
 plot(m2.quat_log)

@@ -8,14 +8,14 @@ classdef MyoData < handle
   
   properties (SetAccess = private)
     
-    time_imu = [];
+    timeIMU = [];
     quat = [];
     gyro = [];
     gyro_fixed = [];
     accel = [];
     accel_fixed = [];
     
-    time_emg = [];
+    timeEMG = [];
     emg = [];
     pose = [];
     
@@ -30,13 +30,13 @@ classdef MyoData < handle
   end
   
   properties (SetAccess=private,Hidden=true)
-    time_imu_log        = [];
+    timeIMU_log     = [];
     quat_log        = [];
     gyro_log        = [];
     gyro_fixed_log  = [];
     accel_log       = [];
     accel_fixed_log = [];
-    time_emg_log    = [];
+    timeEMG_log    = [];
     emg_log         = [];
     pose_log        = [];
     POSE_NUM_REST           = 0;
@@ -136,89 +136,78 @@ classdef MyoData < handle
     function val = get.pose_unknown_log(m)
       val = m.pose_log == m.POSE_NUM_UNKNOWN;
     end
-    
-    function pushLogs(m,ti,q,g,gf,a,af,te,e,p)
-      if ~isempty(ti)
-        m.time_imu_log    = [ m.time_imu_log     ; ti ];
-        m.quat_log        = [ m.quat_log         ; q ];
-        m.gyro_log        = [ m.gyro_log         ; g ];
-        m.gyro_fixed_log  = [ m.gyro_fixed_log   ; gf ];
-        m.accel_log       = [ m.accel_log        ; a ];
-        m.accel_fixed_log = [ m.accel_fixed_log  ; af ];
-      end
-      if ~isempty(te)
-        m.time_emg_log    = [ m.time_emg_log     ; te ];
-        m.emg_log         = [ m.emg_log          ; e ];
-        m.pose_log        = [ m.pose_log         ; p ];
-      end
-    end
-    
+        
     function clearLogs(m)
       % clearLogs  Clears logged data
       %   Sets all <data>_log properties to the empty matrix. Do not call
       %   this method while MyoMex is_streaming.
-      m.time_imu_log    = [];
+      m.timeIMU_log    = [];
       m.quat_log        = [];
       m.gyro_log        = [];
       m.gyro_fixed_log  = [];
       m.accel_log       = [];
       m.accel_fixed_log = [];
-      m.time_emg_log    = [];
+      m.timeEMG_log    = [];
       m.emg_log         = [];
       m.pose_log        = [];
     end
     
-    function addData(m,data,curr_time)
+    function addData(m,data)
       % addData  Adds new data
-      
-      countIMU = size(data.quat,1);
-      countEMG = size(data.emg,1);
-      
-      ti = m.IMU_SAMPLE_TIME * (1:1:countIMU);
-      if isempty(m.time_imu) || ...
-          ( (curr_time - m.time_imu - T) > m.RESTART_DELAY )
-        % we're too far ahead of the previous logged time, rebase
-        ti = curr_time - ti(end) + ti;
-      else
-        ti = m.time_imu + ti;
-      end
-      
-      te = m.EMG_SAMPLE_TIME * (1:1:countEMG);
-      if isempty(m.time_emg) || ...
-          ( (curr_time - m.time_emg - T) > m.RESTART_DELAY )
-        % we're too far ahead of the previous logged time, rebase
-        te = curr_time - te(end) + te;
-      else
-        te = m.time_emg + te;
-      end
-      
-      if countIMU > 0
-        q = data.quat;
-        g = data.gyro;
-        a = data.accel;
-        q = m.qRenorm(q); %renormalize quaterions
-        gf = m.qRot(q,g);
-        af = m.qRot(q,a);
-        m.quat = q(end,:);
-        m.gyro = g(end,:);
-        m.gyro_fixed = gf(end,:);
-        m.accel = a(end,:);
-        m.accel_fixed = af(end,:);
-      end
-      
-      if countEMG > 0
-        e = data.emg;
-        p = data.pose;
-        e = e./m.EMG_SCALE; % normalize emg values
-        m.emg = e(end,:);
-        m.pose = p(end,:);
-      end
-      
-      m.pushLogs(ti',q,g,gf,a,af,te',e,p);
-      
+      m.addDataIMU(data);
+      m.addDataEMG(data);
+    end
+        
+  end
+  
+  methods (Access=private)
+    
+    function addDataIMU(m,data)
+%       data
+      if isempty(data.quat), return; end
+      t = data.timeIMU;
+      q = data.quat;
+      g = data.gyro;
+      a = data.accel;
+      q = m.qRenorm(q); %renormalize quaterions
+      gf = m.qRot(q,g);
+      af = m.qRot(q,a);
+      m.timeIMU = t(end,:);
+      m.quat = q(end,:);
+      m.gyro = g(end,:);
+      m.gyro_fixed = gf(end,:);
+      m.accel = a(end,:);
+      m.accel_fixed = af(end,:);
+      m.pushLogsIMU(t,q,g,gf,a,af);
     end
     
     
+    function addDataEMG(m,data)
+      if isempty(data.timeEMG), return; end
+      t = data.timeEMG;
+      e = data.emg;
+      p = data.pose;
+      e = e./m.EMG_SCALE; % normalize emg values
+      m.timeEMG = t(end,:);
+      m.emg = e(end,:);
+      m.pose = p(end,:);
+      m.pushLogsEMG(t,e,p);      
+    end
+    
+    function pushLogsIMU(m,t,q,g,gf,a,af)
+      m.timeIMU_log     = [ m.timeIMU_log     ; t  ];
+      m.quat_log        = [ m.quat_log        ; q  ];
+      m.gyro_log        = [ m.gyro_log        ; g  ];
+      m.gyro_fixed_log  = [ m.gyro_fixed_log  ; gf ];
+      m.accel_log       = [ m.accel_log       ; a  ];
+      m.accel_fixed_log = [ m.accel_fixed_log ; af ];
+    end
+    
+    function pushLogsEMG(m,t,e,p)
+      m.timeEMG_log   = [ m.timeEMG_log ; t ];
+      m.emg_log       = [ m.emg_log     ; e ];
+      m.pose_log      = [ m.pose_log    ; p ];
+    end
   end
   
   methods (Static=true)

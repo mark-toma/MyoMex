@@ -3,7 +3,7 @@
 #define MYO_CLASS_HPP
 
 // comment the following line to remove debug output via DB_MYO_CLASS()
-//#define DEBUG_MYO_CLASS
+#define DEBUG_MYO_CLASS
 #ifdef DEBUG_MYO_CLASS
 #define DB_MYO_CLASS(fmt, ...) printf(fmt, ##__VA_ARGS__)
 #else
@@ -33,6 +33,7 @@
 // IMU data frame
 struct FrameIMU
 {
+  float timeIMU;
   myo::Quaternion<float> quat;
   myo::Vector3<float> gyro, accel;
 }; // FrameIMU
@@ -40,6 +41,7 @@ struct FrameIMU
 // EMG data frame
 struct FrameEMG
 {
+  float timeEMG;
   std::array<int8_t,8> emg;
   unsigned int pose;
 }; // FrameEMG
@@ -71,19 +73,20 @@ class MyoData
   
   // Pointer to a Myo device instance provided by hub
   myo::Myo* pMyo;
+  uint64_t timestampMyoInit;
   
   // IMU data queues and state information
+  std::deque<float> timeIMU;
   std::deque<myo::Quaternion<float>> quat;
   std::deque<myo::Vector3<float>> gyro;
   std::deque<myo::Vector3<float>> accel;
   unsigned int countIMU;
-  uint64_t timestampIMU;
   
   // EMG data queues and state information
+  std::deque<float> timeEMG;
   std::deque<std::array<int8_t,8>> emg;
   std::deque<unsigned int> pose;
   unsigned int countEMG;
-  uint64_t timestampEMG;
   unsigned int semEMG;
   
   // TODO
@@ -92,24 +95,17 @@ class MyoData
   // ...
   // ...
   
+  float timeSinceInit(uint64_t timestamp)
+  {
+    float retval = (0.000001)*(timestamp-timestampMyoInit);
+    return retval;
+  }
   
   void syncIMU(uint64_t ts)
   {
-    if (ts > timestampIMU) {
-      countIMU++;
-      // find mimumum length of IMU data
-      size_t qs = quat.size();
-      size_t gs = gyro.size();
-      size_t as = accel.size();
-      
-      size_t sz = 0;
-      if ( (qs>gs) && (qs>as) ) {
-        sz = qs;
-      } else if ( (gs>qs) && (gs>as) ) {
-        sz = gs;
-      } else {
-        sz = as;
-      }
+    float tsInit = timeSinceInit(ts);
+    if ( tsInit > timeIMU.back()) {
+      size_t sz = timeIMU.size();
       // pad onto IMU data to make them all maximum length
       while ( quat.size() < sz ) {
         myo::Quaternion<float> q = quat.back();
@@ -123,69 +119,53 @@ class MyoData
         myo::Vector3<float> a = accel.back();
         accel.push_back(a);
       }
+      countIMU++;
+      timeIMU.push_back(tsInit);
     }
-    timestampIMU = ts; // update imu timestamp
   }
   
   // Helper for syncEMG(...,isPoseSync)
   void syncPose(uint64_t ts)
   {
-    syncEMG(ts,true);
+    // pose is just tagging along with EMG and arbitrarily being filled
+    // at the same rate
+    unsigned int p = pose.back();
+    while(pose.size()< (timeEMG.size()-1) ) { pose.push_back(p); }
   }
   
-  // Helper for syncEMG(...,isPoseSync)
+  
   void syncEMG(uint64_t ts)
   {
-    syncEMG(ts,false);
-  }
-  
-  // This is the real syncEMG to be called by syncEMG helper or syncPose
-  void syncEMG(uint64_t ts, bool isPoseSync)
-  {
-    // if this is the same timestamp, increment sem
-    // it this is a new timestamp, reset sem
-    if ( (ts > timestampEMG) && (semEMG < 1) ) {
-      // we lost a sample... ZOH on the last one
-      std::array<int8_t,8> e = emg.back();
-      emg.push_back(e);
-      semEMG = 0;
-      countEMG++;
-    } else if ( (ts > timestampEMG) && (semEMG > 1) ) {
-      // we had extra suplicate EMG samples...
-      // assume that all emgs come in pairs per time sample so we should
-      // have an even number of consecutive timestamps...
+    float tsInit = timeSinceInit(ts);
+    size_t sz = timeEMG.size();
+    if ( tsInit>timeEMG.back() ) { // new timestamp
       if ( 0==(semEMG%2) ) {
         std::array<int8_t,8> e = emg.back();
         emg.push_back(e);
+        float t = timeEMG.back();
+        timeEMG.push_back(t);
       }
-      semEMG = 0;
-      countEMG++;
+      semEMG = 0; // reset sem
     } else {
-      // everything is okay, no need to fix stuff
-      semEMG++;
+      semEMG++; // increment sem
     }
-    // TODO
-    //   prefill _pose to match one more than current length of _emg
-    //fill _pose to one less than _emg.size if isPoseSync
-    //fill _pose to one more than _emg.size if ~isPoseSync
-    size_t sz;
-    if (isPoseSync)
-      sz = emg.size()-1;
-    else
-      sz = emg.size()+1;
-    int p = pose.back();
-    while(pose.size()<sz)
-      pose.push_back(p);
+    countEMG++;
+    timeEMG.push_back(tsInit);
+    
+    // copy pose to bring it up to same size as new timeEMG and emg
+    unsigned int p = pose.back();
+    while (pose.size() < timeEMG.size() ) { pose.push_back(p); }
   }
   
 public:
   
   // Construct a MyoData
   // The constructor must be passed a single myo::Myo* input argument.
-  MyoData(myo::Myo* myo)
-  : timestampIMU(0), timestampEMG(0), countIMU(1), countEMG(1), semEMG(0)
+  MyoData(myo::Myo* myo, uint64_t timestamp)
+  : countIMU(1), countEMG(1), semEMG(0)
   {
     pMyo = myo; // pointer to myo::Myo
+    timestampMyoInit = timestamp;
     
     // perform some operations on myo to set it up before subsequent use
     pMyo->setStreamEmg(myo::Myo::streamEmgEnabled);
@@ -201,6 +181,9 @@ public:
     accel.push_back(a);
     emg.push_back(e);
     pose.push_back(POSE_NUM_UNKNOWN);
+    
+    timeIMU.push_back(timeSinceInit(timestamp));
+    timeEMG.push_back(timeSinceInit(timestamp));
   }
   
   // Myo is owned by hub... no cleanup necessary here
@@ -209,12 +192,12 @@ public:
   
   FrameIMU &getFrameIMU()
   {
-    DB_MYO_CLASS("getFrameIMU\count: %d - 1 = ",countIMU);
     countIMU = countIMU - 1;
-    DB_MYO_CLASS("%d\n",countIMU);
+    frameIMU.timeIMU     = timeIMU.front();
     frameIMU.quat        = quat.front();
     frameIMU.gyro        = gyro.front();
     frameIMU.accel       = accel.front();
+    timeIMU.pop_front();
     quat.pop_front();
     gyro.pop_front();
     accel.pop_front();
@@ -225,8 +208,10 @@ public:
   FrameEMG &getFrameEMG()
   {
     countEMG = countEMG - 1;
-    frameEMG.emg  = emg.front();
-    frameEMG.pose = pose.front();
+    frameEMG.timeEMG = timeEMG.front();
+    frameEMG.emg     = emg.front();
+    frameEMG.pose    = pose.front();
+    timeEMG.pop_front();
     emg.pop_front();
     pose.pop_front();
     return frameEMG;
@@ -257,7 +242,7 @@ public:
       frameIMU = getFrameIMU();
     FrameEMG frameEMG;
     while ( getCountEMG() > 1 )
-      frameEMG = getFrameEMG();  
+      frameEMG = getFrameEMG();
   }
   
   
@@ -384,21 +369,21 @@ public:
   const unsigned int getCountMyos() { return knownMyos.size(); }
   
   
-  const unsigned int getMyoID(myo::Myo* myo)
+  const unsigned int getMyoID(myo::Myo* myo,uint64_t timestamp)
   {
     // search myos in knownMyos for myo
     for (size_t ii = 0; ii < knownMyos.size(); ii++)
       if (knownMyos[ii]->getInstance() == myo) { return ii+1; }
     
     // add myo to a new MyoData* in knowmMyos if it doesn't exist yet
-    knownMyos.push_back(new MyoData(myo));
+    knownMyos.push_back(new MyoData(myo,timestamp));
     return knownMyos.size();
   }
   
   
   void onPair(myo::Myo* myo, uint64_t timestamp, myo::FirmwareVersion firmwareVersion)
   {
-    if (!getMyoID(myo)) mexErrMsgTxt("Failed to add Myo\n");
+    if (!getMyoID(myo,timestamp)) mexErrMsgTxt("Failed to add Myo\n");
   }
   
   // onUnpair() is called whenever the Myo is disconnected from Myo Connect by the user.
@@ -411,7 +396,7 @@ public:
   void onConnect(myo::Myo *myo, uint64_t timestamp, myo::FirmwareVersion firmwareVersion)
   {
     myo->setStreamEmg(myo::Myo::streamEmgEnabled);
-    if (!getMyoID(myo)) mexErrMsgTxt("Failed to add Myo\n");
+    if (!getMyoID(myo,timestamp)) mexErrMsgTxt("Failed to add Myo\n");
   }
   
   
@@ -422,38 +407,38 @@ public:
   }
   
   
-  void onOrientationData(myo::Myo* myo, uint64_t ts, const myo::Quaternion<float>& q)
+  void onOrientationData(myo::Myo* myo, uint64_t timestamp, const myo::Quaternion<float>& q)
   {
     if (!addDataEnabled) { return; }
-    knownMyos[getMyoID(myo)-1]->addQuat(q,ts);
+    knownMyos[getMyoID(myo,timestamp)-1]->addQuat(q,timestamp);
   }
   
   
-  void onGyroscopeData (myo::Myo* myo, uint64_t ts, const myo::Vector3<float>& g)
+  void onGyroscopeData (myo::Myo* myo, uint64_t timestamp, const myo::Vector3<float>& g)
   {
     if (!addDataEnabled) { return; }
-    knownMyos[getMyoID(myo)-1]->addGyro(g,ts);
+    knownMyos[getMyoID(myo,timestamp)-1]->addGyro(g,timestamp);
   }
   
   
-  void onAccelerometerData (myo::Myo* myo, uint64_t ts, const myo::Vector3<float>& a)
+  void onAccelerometerData (myo::Myo* myo, uint64_t timestamp, const myo::Vector3<float>& a)
   {
     if (!addDataEnabled) { return; }
-    knownMyos[getMyoID(myo)-1]->addAccel(a,ts);
+    knownMyos[getMyoID(myo,timestamp)-1]->addAccel(a,timestamp);
   }
   
   
-  void onEmgData(myo::Myo* myo, uint64_t ts, const int8_t  *e)
+  void onEmgData(myo::Myo* myo, uint64_t timestamp, const int8_t  *e)
   {
     if (!addDataEnabled) { return; }
-    knownMyos[getMyoID(myo)-1]->addEmg(e,ts);
+    knownMyos[getMyoID(myo,timestamp)-1]->addEmg(e,timestamp);
   }
   
   
-  void onPose(myo::Myo* myo, uint64_t ts, myo::Pose p)
+  void onPose(myo::Myo* myo, uint64_t timestamp, myo::Pose p)
   {
     if (!addDataEnabled) { return; }
-    knownMyos[getMyoID(myo)-1]->addPose(p,ts);
+    knownMyos[getMyoID(myo,timestamp)-1]->addPose(p,timestamp);
   }
   
   
