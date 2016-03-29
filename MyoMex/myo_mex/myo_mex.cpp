@@ -229,68 +229,66 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
               szIMU2,szEMG2);
     }
     
-    DB_MYO_MEX("myo_mex get_streaming_data:\n\tEntering iterative read loop\n");
-    // read sz<src><id> elements out of each of these sources
-    while ( (iiIMU1<szIMU1) || (iiEMG1<szEMG1) || (iiIMU2<szIMU2) || (iiEMG2<szEMG2) )
+    DWORD dwWaitResult;
+    dwWaitResult = WaitForSingleObject(hMutex,INFINITE);
+    DB_MYO_MEX("myo_mex get_streaming_data:\n\tAcquired lock\n");
+    switch (dwWaitResult)
     {
-      DB_MYO_MEX("myo_mex get_streaming_data:\n\tAcquiring lock\n");
-      // request lock
-      DWORD dwWaitResult;
-      dwWaitResult = WaitForSingleObject(hMutex,INFINITE);
-      DB_MYO_MEX("myo_mex get_streaming_data:\n\tAcquired lock\n");
-      switch (dwWaitResult)
-      {
-        case WAIT_OBJECT_0: // The thread got ownership of the mutex
-          DB_MYO_MEX("myo_mex get_streaming_data:\n\tHolding lock\n");
-          // holding lock
+      case WAIT_OBJECT_0: // The thread got ownership of the mutex
+        DB_MYO_MEX("myo_mex get_streaming_data:\n\tHolding lock\n");
+        // holding lock
+        DB_MYO_MEX("myo_mex get_streaming_data:\n\tEntering iterative read loop\n");
+        // read sz<src><id> elements out of each of these sources
+        while ( (iiIMU1<szIMU1) || (iiEMG1<szEMG1) || (iiIMU2<szIMU2) || (iiEMG2<szEMG2) )
+        {
           if (iiIMU1<szIMU1) {
             DB_MYO_MEX("myo_mex get_streaming_data:\n\tgetFrameIMU1\n");
             frameIMU1 = collector.getFrameIMU(1);
             DB_MYO_MEX("myo_mex get_streaming_data:\n\tfillOutputIMU1\n");
             fillOutputIMU(frameIMU1,outData1,iiIMU1,szIMU1);
             iiIMU1++;
-            //break;
           }
           if (iiEMG1<szEMG1) {
-            DB_MYO_MEX("myo_mex get_streaming_data:\n\tgetFrameEMG1\n");
+            //DB_MYO_MEX("myo_mex get_streaming_data:\n\tgetFrameEMG1\n");
             frameEMG1 = collector.getFrameEMG(1);
-            DB_MYO_MEX("myo_mex get_streaming_data:\n\tfillOutputEMG1\n");
+            //DB_MYO_MEX("myo_mex get_streaming_data:\n\tfillOutputEMG1\n");
             fillOutputEMG(frameEMG1,outData1,iiEMG1,szEMG1);
             iiEMG1++;
-            //break;
           }
           if (iiIMU2<szIMU2) {
-            DB_MYO_MEX("myo_mex get_streaming_data:\n\tgetFrameIMU2\n");
+            //DB_MYO_MEX("myo_mex get_streaming_data:\n\tgetFrameIMU2\n");
             frameIMU2 = collector.getFrameIMU(2);
-            DB_MYO_MEX("myo_mex get_streaming_data:\n\tfillOutputIMU2\n");
+            //DB_MYO_MEX("myo_mex get_streaming_data:\n\tfillOutputIMU2\n");
             fillOutputIMU(frameIMU2,outData2,iiIMU2,szIMU2);
             iiIMU2++;
-            //break;
           }
           if (iiEMG2<szEMG2) {
-            DB_MYO_MEX("myo_mex get_streaming_data:\n\tgetFrameEMG2\n");
+            //DB_MYO_MEX("myo_mex get_streaming_data:\n\tgetFrameEMG2\n");
             frameEMG2 = collector.getFrameEMG(2);
-            DB_MYO_MEX("myo_mex get_streaming_data:\n\tfillOutputEMG2\n");
+            //DB_MYO_MEX("myo_mex get_streaming_data:\n\tfillOutputEMG2\n");
             fillOutputEMG(frameEMG2,outData2,iiEMG2,szEMG2);
             iiEMG2++;
-            //break;
-          }
-          break;
-        case WAIT_ABANDONED:
-          DB_MYO_MEX("myo_mex get_streaming_data:\n\tBad lock\n");
-          mexErrMsgTxt("Acquired abandoned lock\n");
-          break;
-      }
-      DB_MYO_MEX("myo_mex get_streaming_data:\n\tReleasing lock\n");
-      // release lock if it was acquired
-      if ( (dwWaitResult == WAIT_OBJECT_0) && !ReleaseMutex(hMutex)) // release lock
-        mexErrMsgTxt("Failed to release lock\n");
+          }          
+        }
+        DB_MYO_MEX("myo_mex get_streaming_data:\n\tReleasing lock\n");
+        // release lock if it was acquired
+        if ( !ReleaseMutex(hMutex)) // release lock
+          mexErrMsgTxt("Failed to release lock\n");
+        break;
+      case WAIT_ABANDONED:
+        DB_MYO_MEX("myo_mex get_streaming_data:\n\tBad lock\n");
+        mexErrMsgTxt("Acquired abandoned lock\n");
+        break;
     }
+    DB_MYO_MEX("myo_mex get_streaming_data:\nAssigning output struct\n");
     // assign output matrices to struct array
     plhs[DATA_STRUCT_OUT_NUM] = mxCreateStructMatrix(1,countMyos,NUM_FIELDS,output_fields);
+    DB_MYO_MEX("myo_mex get_streaming_data:\nAssigning outData1\n");
     assnOutputStruct(plhs[DATA_STRUCT_OUT_NUM], outData1, 1);
-    if (countMyos>1)
-      assnOutputStruct(plhs[DATA_STRUCT_OUT_NUM], outData1, 2);
+    if (countMyos>1) {
+      DB_MYO_MEX("myo_mex get_streaming_data:\nAssigning outData2\n");
+      assnOutputStruct(plhs[DATA_STRUCT_OUT_NUM], outData2, 2);
+    }
     
   } else if ( !strcmp("stop_streaming",cmd) ) {
     // ----------------------------------------- myo_mex stop_streaming ---

@@ -3,7 +3,7 @@
 #define MYO_CLASS_HPP
 
 // comment the following line to remove debug output via DB_MYO_CLASS()
-#define DEBUG_MYO_CLASS
+//#define DEBUG_MYO_CLASS
 #ifdef DEBUG_MYO_CLASS
 #define DB_MYO_CLASS(fmt, ...) printf(fmt, ##__VA_ARGS__)
 #else
@@ -16,14 +16,6 @@
 #include <array>        // myo sdk emg data
 #include <vector>
 #include <queue>
-
-#define POSE_NUM_REST           0
-#define POSE_NUM_FIST           1
-#define POSE_NUM_WAVE_IN        2
-#define POSE_NUM_WAVE_OUT       3
-#define POSE_NUM_FINGERS_SPREAD 4
-#define POSE_NUM_DOUBLE_TAP     5
-#define POSE_NUM_UNKNOWN        6
 
 
 // --- Data Frames
@@ -84,13 +76,7 @@ class MyoData
   unsigned int semEMG;
   unsigned int countEMG;
   uint64_t timestampEMG;
-  
-  // TODO
-  //   Implement Meta data
-  // Meta data queues and state information
-  // ...
-  // ...
-    
+      
   void syncIMU(uint64_t ts)
   {
     if ( ts > timestampIMU ) {
@@ -169,8 +155,7 @@ public:
     accel.pop();
     return frameIMU;
   }
-  
-  
+    
   FrameEMG &getFrameEMG()
   {
     countEMG = countEMG - 1;
@@ -178,14 +163,6 @@ public:
     emg.pop();
     return frameEMG;
   }
-  
-  // TODO
-  //   Implement getFrameMeta()
-  //  const FrameMeta &getFrameMeta()
-  //  {
-  // // assign frameMeta
-  // return frameMeta;
-  // }
   
   
   myo::Myo* getInstance() { return pMyo; }

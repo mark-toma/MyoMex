@@ -1,12 +1,9 @@
 %% MyoMex_work.m
 
-%% 330ms per getdata 
-
-
-mm = MyoMex(1);
+mm = MyoMex(2);
 
 m1 = mm.myo_data(1);
-% m2 = mm.myo_data(2);
+m2 = mm.myo_data(2);
 pause(30);
 
 %%
@@ -19,6 +16,8 @@ nEMG = size(m1.emg_log,1)
 
 %%
 
+
+
 % figure;
 % subplot(3,1,1);
 % plot(m1.quat_log)
@@ -30,27 +29,7 @@ nEMG = size(m1.emg_log,1)
 % figure;
 % subplot(2,1,1);
 % plot(m1.emg_log);
-% subplot(2,1,2);
-% plot(m1.pose_log);
 % 
-% nDivs = 30;
-% figure;
-% subplot(2,1,1);
-% hist(diff(m1.timeIMU_log(2:end)),nDivs);
-% subplot(2,1,2);
-% hist(diff(m1.timeEMG_log(2:end)),nDivs);
-% 
-% figure;
-% subplot(2,1,1);
-% plot(m1.timeIMU_log);
-% subplot(2,1,2);
-% plot(m1.timeEMG_log);
-
-
-
-
-
-%%
 % figure;
 % subplot(3,1,1);
 % plot(m2.quat_log)
@@ -62,6 +41,9 @@ nEMG = size(m1.emg_log,1)
 % figure;
 % subplot(2,1,1);
 % plot(m2.emg_log);
-% subplot(2,1,2);
-% plot(m2.pose_log);
+
+
+
+
+
 
