@@ -3,7 +3,7 @@ classdef MyoData < handle
   %
   
   properties
-    
+    isStreaming = true;
   end
   
   properties (SetAccess = private)
@@ -39,13 +39,14 @@ classdef MyoData < handle
     timeEMG_log    = [];
     emg_log         = [];
     pose_log        = [];
+    
     POSE_NUM_REST           = 0;
     POSE_NUM_FIST           = 1;
     POSE_NUM_WAVE_IN        = 2;
     POSE_NUM_WAVE_OUT       = 3;
     POSE_NUM_FINGERS_SPREAD = 4;
     POSE_NUM_DOUBLE_TAP     = 5;
-    POSE_NUM_UNKNOWN        = 6;
+    POSE_NUM_UNKNOWN        = hex2dec('ffff');
   end
   
   properties (Dependent)
@@ -64,6 +65,9 @@ classdef MyoData < handle
   end
   
   properties (Access=private,Hidden=true)
+    prevTimeIMU = [];
+    prevTimeEMG = [];
+    
     IMU_SAMPLE_TIME = 0.020; %  50Hz
     EMG_SAMPLE_TIME = 0.005; % 200Hz
     EMG_SCALE = 128;
@@ -72,141 +76,188 @@ classdef MyoData < handle
   
   methods
     
-    function m = MyoData()
+    function this = MyoData(countMyos)
+      
+      if nargin<1
+        countMyos = 0;
+      end
+      
+      if ~isnumeric(countMyos) || ~isscalar(countMyos) || mod(countMyos,1) || (countMyos<0)
+        error('Input countMyos must be numeric scalar in {0,1,2,...}.');
+      end
+      
+      if countMyos > 0
+        this(countMyos) = MyoData();
+      end
       
     end
     
-    function delete(m)
+    function delete(this)
       
     end
     
-    function val = get.rot(m)
-      if isempty(m.quat)
+    function val = get.rot(this)
+      if isempty(this.quat)
         val = [];
         return;
       end
-      val = m.q2r(m.quat);
+      val = this.q2r(this.quat);
     end
-    function val = get.rot_log(m)
-      if isempty(m.quat_log)
+    function val = get.rot_log(this)
+      if isempty(this.quat_log)
         val = [];
         return;
       end
-      val = m.q2r(m.quat);
+      val = this.q2r(this.quat);
     end
-    function val = get.pose_rest(m)
-      val = m.pose == m.POSE_NUM_REST;
+    function val = get.pose_rest(this)
+      val = this.pose == this.POSE_NUM_REST;
     end
-    function val = get.pose_fist(m)
-      val = m.pose == m.POSE_NUM_FIST;
+    function val = get.pose_fist(this)
+      val = this.pose == this.POSE_NUM_FIST;
     end
-    function val = get.pose_wave_in(m)
-      val = m.pose == m.POSE_NUM_WAVE_IN;
+    function val = get.pose_wave_in(this)
+      val = this.pose == this.POSE_NUM_WAVE_IN;
     end
-    function val = get.pose_wave_out(m)
-      val = m.pose == m.POSE_NUM_WAVE_OUT;
+    function val = get.pose_wave_out(this)
+      val = this.pose == this.POSE_NUM_WAVE_OUT;
     end
-    function val = get.pose_fingers_spread(m)
-      val = m.pose == m.POSE_NUM_FINGERS_SPREAD;
+    function val = get.pose_fingers_spread(this)
+      val = this.pose == this.POSE_NUM_FINGERS_SPREAD;
     end
-    function val = get.pose_double_tap(m)
-      val = m.pose == m.POSE_NUM_DOUBLE_TAP;
+    function val = get.pose_double_tap(this)
+      val = this.pose == this.POSE_NUM_DOUBLE_TAP;
     end
-    function val = get.pose_unknown(m)
-      val = m.pose == m.POSE_NUM_UNKNOWN;
+    function val = get.pose_unknown(this)
+      val = this.pose == this.POSE_NUM_UNKNOWN;
     end
-    function val = get.pose_rest_log(m)
-      val = m.pose_log == m.POSE_NUM_REST;
+    function val = get.pose_rest_log(this)
+      val = this.pose_log == this.POSE_NUM_REST;
     end
-    function val = get.pose_fist_log(m)
-      val = m.pose_log == m.POSE_NUM_FIST;
+    function val = get.pose_fist_log(this)
+      val = this.pose_log == this.POSE_NUM_FIST;
     end
-    function val = get.pose_wave_in_log(m)
-      val = m.pose_log == m.POSE_NUM_WAVE_IN;
+    function val = get.pose_wave_in_log(this)
+      val = this.pose_log == this.POSE_NUM_WAVE_IN;
     end
-    function val = get.pose_wave_out_log(m)
-      val = m.pose_log == m.POSE_NUM_WAVE_OUT;
+    function val = get.pose_wave_out_log(this)
+      val = this.pose_log == this.POSE_NUM_WAVE_OUT;
     end
-    function val = get.pose_fingers_spread_log(m)
-      val = m.pose_log == m.POSE_NUM_FINGERS_SPREAD;
+    function val = get.pose_fingers_spread_log(this)
+      val = this.pose_log == this.POSE_NUM_FINGERS_SPREAD;
     end
-    function val = get.pose_double_tap_log(m)
-      val = m.pose_log == m.POSE_NUM_DOUBLE_TAP;
+    function val = get.pose_double_tap_log(this)
+      val = this.pose_log == this.POSE_NUM_DOUBLE_TAP;
     end
-    function val = get.pose_unknown_log(m)
-      val = m.pose_log == m.POSE_NUM_UNKNOWN;
+    function val = get.pose_unknown_log(this)
+      val = this.pose_log == this.POSE_NUM_UNKNOWN;
     end
         
-    function clearLogs(m)
+    function clearLogs(this)
       % clearLogs  Clears logged data
       %   Sets all <data>_log properties to the empty matrix. Do not call
       %   this method while MyoMex is_streaming.
-      m.timeIMU_log    = [];
-      m.quat_log        = [];
-      m.gyro_log        = [];
-      m.gyro_fixed_log  = [];
-      m.accel_log       = [];
-      m.accel_fixed_log = [];
-      m.timeEMG_log    = [];
-      m.emg_log         = [];
-      m.pose_log        = [];
+      for ii = 1:length(this)
+        this(ii).timeIMU_log     = [];
+        this(ii).quat_log        = [];
+        this(ii).gyro_log        = [];
+        this(ii).gyro_fixed_log  = [];
+        this(ii).accel_log       = [];
+        this(ii).accel_fixed_log = [];
+        this(ii).timeEMG_log     = [];
+        this(ii).emg_log         = [];
+        this(ii).pose_log        = [];
+      end
     end
     
-    function addData(m,data)
+    function startStreaming(this), this.isStreaming = true; end
+
+    function stopStreaming(this), this.isStreaming = false; end
+    
+    function addData(this,data,currTime)
       % addData  Adds new data
-      m.addDataIMU(data);
-      m.addDataEMG(data);
+      assert(length(this)==length(data),...
+        'Input data must be the same length as MyoData');
+      for ii=1:length(this)
+        this(ii).addDataIMU(data(ii),currTime);
+        this(ii).addDataEMG(data(ii),currTime);
+      end
     end
         
   end
   
   methods (Access=private)
     
-    function addDataIMU(m,data)
-%       data
+    function addDataIMU(this,data,currTime)
       if isempty(data.quat), return; end
-      t = zeros(size(data.quat,1),1);
+      
+      N = size(data.quat,1);
+      t = (1:1:N)' * this.IMU_SAMPLE_TIME;
+
+      if ~isempty(this.prevTimeIMU)
+        t = t + this.prevTimeIMU;
+        this.prevTimeIMU = t(end);
+      else % init time
+        t = t - t(end) + currTime;
+        this.prevTimeIMU = t(end);
+      end        
+      
       q = data.quat;
       g = data.gyro;
       a = data.accel;
-      q = m.qRenorm(q); %renormalize quaterions
-      gf = m.qRot(q,g);
-      af = m.qRot(q,a);
-      m.timeIMU = t(end,:);
-      m.quat = q(end,:);
-      m.gyro = g(end,:);
-      m.gyro_fixed = gf(end,:);
-      m.accel = a(end,:);
-      m.accel_fixed = af(end,:);
-      m.pushLogsIMU(t,q,g,gf,a,af);
+      q = this.qRenorm(q); %renormalize quaterions
+      gf = this.qRot(q,g);
+      af = this.qRot(q,a);
+      
+      this.timeIMU = t(end,:);
+      this.quat = q(end,:);
+      this.gyro = g(end,:);
+      this.gyro_fixed = gf(end,:);
+      this.accel = a(end,:);
+      this.accel_fixed = af(end,:);
+      
+      if this.isStreaming, this.pushLogsIMU(t,q,g,gf,a,af); end
+      
     end
     
     
-    function addDataEMG(m,data)
+    function addDataEMG(this,data,currTime)
       if isempty(data.emg), return; end
-      t = zeros(size(data.emg,1),1);
-      e = data.emg;
-      p = zeros(size(data.emg,1),1);
-      e = e./m.EMG_SCALE; % normalize emg values
-      m.timeEMG = t(end,:);
-      m.emg = e(end,:);
-      m.pose = p(end,:);
-      m.pushLogsEMG(t,e,p);      
+      
+      N = size(data.emg,1);
+      t = (1:1:N)' * this.EMG_SAMPLE_TIME;
+
+      if ~isempty(this.prevTimeEMG)
+        t = t + this.prevTimeIMU;
+      else % init time
+        t = t - t(end) + currTime;
+      end
+      this.prevTimeEMG = t(end);
+      
+      e = data.emg./this.EMG_SCALE;
+      p = data.pose;
+
+      this.timeEMG = t(end,:);
+      this.emg = e(end,:);
+      this.pose = p(end,:);
+      
+      if this.isStreaming, this.pushLogsEMG(t,e,p); end
+      
     end
     
-    function pushLogsIMU(m,t,q,g,gf,a,af)
-      m.timeIMU_log     = [ m.timeIMU_log     ; t  ];
-      m.quat_log        = [ m.quat_log        ; q  ];
-      m.gyro_log        = [ m.gyro_log        ; g  ];
-      m.gyro_fixed_log  = [ m.gyro_fixed_log  ; gf ];
-      m.accel_log       = [ m.accel_log       ; a  ];
-      m.accel_fixed_log = [ m.accel_fixed_log ; af ];
+    function pushLogsIMU(this,t,q,g,gf,a,af)
+      this.timeIMU_log     = [ this.timeIMU_log     ; t  ];
+      this.quat_log        = [ this.quat_log        ; q  ];
+      this.gyro_log        = [ this.gyro_log        ; g  ];
+      this.gyro_fixed_log  = [ this.gyro_fixed_log  ; gf ];
+      this.accel_log       = [ this.accel_log       ; a  ];
+      this.accel_fixed_log = [ this.accel_fixed_log ; af ];
     end
     
-    function pushLogsEMG(m,t,e,p)
-      m.timeEMG_log   = [ m.timeEMG_log ; t ];
-      m.emg_log       = [ m.emg_log     ; e ];
-      m.pose_log      = [ m.pose_log    ; p ];
+    function pushLogsEMG(this,t,e,p)
+      this.timeEMG_log   = [ this.timeEMG_log ; t ];
+      this.emg_log       = [ this.emg_log     ; e ];
+      this.pose_log      = [ this.pose_log    ; p ];
     end
   end
   

@@ -34,6 +34,7 @@ struct FrameIMU
 struct FrameEMG
 {
   std::array<int8_t,8> emg;
+  myo::Pose pose;
 }; // FrameEMG
 
 // Meta data frame
@@ -73,10 +74,11 @@ class MyoData
   
   // EMG data queues and state information
   std::queue<std::array<int8_t,8>,std::deque<std::array<int8_t,8>>> emg;
+  std::queue<myo::Pose,std::deque<myo::Pose>> pose;
   unsigned int semEMG;
   unsigned int countEMG;
   uint64_t timestampEMG;
-      
+  
   void syncIMU(uint64_t ts)
   {
     if ( ts > timestampIMU ) {
@@ -111,6 +113,15 @@ class MyoData
     }
     countEMG++;
     timestampEMG = ts;
+    // fill pose up to the new countEMG
+    myo::Pose p = pose.back();
+    while ( pose.size()<countEMG ) { pose.push(p); }
+  }
+  
+  void syncPose(uint64_t ts)
+  {
+    myo::Pose p = pose.back();
+    while ( pose.size()<(countEMG-1) ) { pose.push(p); }
   }
   
 public:
@@ -121,7 +132,7 @@ public:
   : countIMU(1), countEMG(1), semEMG(0)
   {
     pMyo = myo; // pointer to myo::Myo
-        
+    
     // perform some operations on myo to set it up before subsequent use
     pMyo->setStreamEmg(myo::Myo::streamEmgEnabled);
     pMyo->unlock(myo::Myo::unlockHold);
@@ -131,10 +142,12 @@ public:
     myo::Vector3<float> g;
     myo::Vector3<float> a;
     std::array<int8_t,8> e;
+    myo::Pose p;
     quat.push(q);        // push them back onto queues
     gyro.push(g);
     accel.push(a);
     emg.push(e);
+    pose.push(p);
     
     timestampIMU = timestamp;
     timestampEMG = timestamp;
@@ -142,7 +155,6 @@ public:
   
   // Myo is owned by hub... no cleanup necessary here
   ~MyoData() {}
-  
   
   FrameIMU &getFrameIMU()
   {
@@ -155,21 +167,20 @@ public:
     accel.pop();
     return frameIMU;
   }
-    
+  
   FrameEMG &getFrameEMG()
   {
     countEMG = countEMG - 1;
     frameEMG.emg     = emg.front();
+    frameEMG.pose    = pose.front();
     emg.pop();
+    pose.pop();
     return frameEMG;
   }
   
-  
   myo::Myo* getInstance() { return pMyo; }
   
-  
   unsigned int getCountIMU() { return countIMU; }
-  
   
   unsigned int getCountEMG() { return countEMG; }
   
@@ -184,13 +195,11 @@ public:
       frameEMG = getFrameEMG();
   }
   
-  
   void addQuat(const myo::Quaternion<float>& _quat, uint64_t timestamp)
   {
     syncIMU(timestamp);
     quat.push(_quat);
   }
-  
   
   void addGyro(const myo::Vector3<float>& _gyro, uint64_t timestamp)
   {
@@ -198,13 +207,11 @@ public:
     gyro.push(_gyro);
   }
   
-  
   void addAccel(const myo::Vector3<float>& _accel, uint64_t timestamp)
   {
     syncIMU(timestamp);
     accel.push(_accel);
   }
-  
   
   void addEmg(const int8_t  *_emg, uint64_t timestamp)
   {
@@ -213,6 +220,12 @@ public:
     int ii = 0;
     for (ii;ii<8;ii++) {tmp[ii]=_emg[ii];}
     emg.push(tmp);
+  }
+  
+  void addPose(myo::Pose _p, uint64_t timestamp)
+  {
+    syncPose(timestamp);
+    pose.push(_p);
   }
   
 }; // MyoData
@@ -290,7 +303,7 @@ public:
   {
     knownMyos.erase(knownMyos.begin()+getMyoID(myo,timestamp)-1);
   }
-    
+  
   void onLock(myo::Myo* myo, uint64_t timestamp)
   {
     // shamelessly unlock the device
@@ -321,8 +334,14 @@ public:
     knownMyos[getMyoID(myo,timestamp)-1]->addEmg(e,timestamp);
   }
   
+  void onPose(myo::Myo* myo, uint64_t timestamp, myo::Pose p)
+  {
+    if (!addDataEnabled) { return; }
+    knownMyos[getMyoID(myo,timestamp)-1]->addPose(p,timestamp);
+  }
+  
   //void onUnpair(myo::Myo* myo, uint64_t timestamp) {}
-  //void onPose(myo::Myo* myo, uint64_t timestamp, myo::Pose p) {}
+  
   //void onArmSync(myo::Myo* myo, uint64_t timestamp, myo::Arm arm, myo::XDirection xDirection) {}
   //void onArmUnsync(myo::Myo* myo, uint64_t timestamp) {}
   //void onUnlock(myo::Myo* myo, uint64_t timestamp) {}

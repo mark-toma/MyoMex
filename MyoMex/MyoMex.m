@@ -68,60 +68,50 @@ classdef MyoMex < handle
   %   m.stopStreaming();
   %
   %   % Plot some data
-  %   plot(m.time_log,m.accel_log,'-',m.time_log,m.emg_log,'-');
+  %   plot(this.time_log,m.accel_log,'-',m.time_log,m.emg_log,'-');
   %
   %   m.delete();
   %   clear m
   
   properties (SetAccess = private)
     % myo_data  Data objects for physical Myo devices
-    myo_data = [MyoData,MyoData];
-    % is_streaming  Streaming status
-    %   Read this property to test the streaming status. This is set by
-    %   startStreaming() and unset by stopStreaming(). If is_streaming is
-    %   set then the only valid method call is to stopStreaming().
-    is_streaming = false;
-  end
-  
-  properties (Dependent)
-    
+    myoData;
   end
   properties (Dependent,Hidden=true)
-    curr_time;
+    currTime;
   end
   properties (Access=private,Hidden=true)
-    TimerStreamingData = [];
-    now_init;
-    streaming_data_init_time;
+    timerStreamingData = [];
+    nowInit;
     DEFAULT_STREAMING_FRAME_TIME = 0.040;
   end
   
   methods
     
     %% --- Object Management
-    function m = MyoMex(num_myos)
+    function this = MyoMex(countMyos)
       % MyoMex  Construct a MyoMex object.
       
-      if nargin<1
-        num_myos = 1;
-      elseif ~any(num_myos==[1,2])
-        error('MyoMex only supports 1 or 2 Myo devices.');
-      end
+      if nargin<1, countMyos = 1; end
+      
+      assert(isnumeric(countMyos) && isscalar(countMyos) && any(countMyos==[1,2]),...
+        'Input countMyos must be a numeric scalar in [1,2].');
       
       % we depend on finding resources in the root directory for this class
       class_root_path = fileparts(mfilename('fullpath'));
       % check that myo_mex exists as a mex file in the expected location
-      if exist(fullfile(class_root_path,'myo_mex/myo_mex'))~=3
-        error('MEX-file ''myo_mex'' is not on MATLAB''s search path and is required for MyoMex.');
-      end
+      assert(3==exist(fullfile(class_root_path,'myo_mex/myo_mex')),...
+        'MEX-file ''myo_mex'' is not on MATLAB''s search path and is required for MyoMex.');
       
+      % check to see if myo_mex is in an initializable state
       try % myo_mex_assert_ready_to_init returns iff myo_mex is unlocked
-        m.myo_mex_assert_ready_to_init();
+        MyoMex.myo_mex_assert_ready_to_init();
       catch err % myo_mex_assert_ready_to_init couldn't unlock myo_mex
         error('MyoMex failed to initialize because myo_mex_assert_ready_to_init() could not bring myo_mex into a known unlocked state with failure message:\n\t''%s''',err.message);
       end
       
-      [fail,emsg,data] = m.myo_mex_init;
+      % call into myo_mex init
+      [fail,emsg,countMyosInit] = this.myo_mex_init();
       if fail
         if strcmp(emsg,'Myo failed to init!') % extra hint
           warning('Myo will fail to init if it is not connected to your system via Myo Connect.');
@@ -129,39 +119,34 @@ classdef MyoMex < handle
         error('MEX-file ''myo_mex'' failed to initialize with error:\n\t''%s''',emsg);
       end
       
-      if data~=num_myos
-        m.myo_mex_delete;
+      % error out if myo_mex failed to initialize with desired countMyos
+      if countMyosInit ~= countMyos
+        this.myo_mex_delete(); % clean up myo_mex internal state
+        this.myo_mex_clear(); % clean up mex file myo_mex
         error('MyoMex failed to initialize %d Myos. myo_mex initialized to %d Myos instead.',...
-          num_myos,data);
+          countMyos,countMyosInit);
       end
       
-      if num_myos==1
-        m.myo_data = MyoData;
-      elseif num_myos==2
-        m.myo_data = [MyoData,MyoData];
-      end
+      this.myoData = MyoData(countMyos);
       
       % at this point, myo_mex should be alive!
-      m.now_init = now;
+      this.nowInit = now;
       
-      m.startStreaming();
+      this.startStreaming();
+      
     end
     
-    
-    function delete(m)
+    function delete(this)
       % delete  Clean up MyoMex instance of MEX function myo_mex
-      %   This must be called to unlock the MEX function myo_mex. Failure
-      %   to call into myo_mex('delete') before attempting to reinitialize
-      %   MyoMex is undefined. Although this might work (the MyoMex
-      %   constructor attempts to brute-force myo_mex unlocked), the
-      %   command window fill up with warning text to indicate that
-      %   something's not quite right.
-      m.stopStreaming();
-      [fail,emsg] = m.myo_mex_delete;
-      m.myo_mex_clear();
-      if fail
-        error('myo_mex delete failed with message:\n\t''%s''',emsg);
-      end
+      this.stopStreaming();
+      [fail,emsg] = MyoMex.myo_mex_delete;
+      assert(~fail,...
+        'myo_mex delete failed with message:\n\t''%s''',emsg);
+      MyoMex.myo_mex_clear();
+    end
+    
+    function val = get.currTime(this)
+      val = (now - this.nowInit)*24*60*60;
     end
     
   end
@@ -169,74 +154,58 @@ classdef MyoMex < handle
   methods (Access=private,Hidden=true)
     
     %% --- Streaming
-    function startStreaming(m)
-      % startStreaming  Start streaming data
-      %   While MyoMex is_streaming, data from Myo will be sampled at
-      %   streaming_data_time into a buffer in MEX function myo_mex. Then a
-      %   MATLAB timer will call into MEX function myo_mex every
-      %   streaming_frame_time seconds to fetch the buffered data and push
-      %   it into the properties of MyoMex.
-      if m.is_streaming, return; end
-      m.is_streaming = true; % block
-      
-      % construct timer
-      if isempty(m.TimerStreamingData)
-        % create timer
-        m.TimerStreamingData = timer(...
-          'busymode','drop',...
-          'executionmode','fixedrate',...
-          'name','MyoMex-TimerStreamingData',...
-          'period',m.DEFAULT_STREAMING_FRAME_TIME,...
-          'startdelay',m.DEFAULT_STREAMING_FRAME_TIME,...
-          'timerfcn',@(src,evt)m.timerStreamingDataCallback(src,evt));
-      end
-      
-      [fail,emsg] = m.myo_mex_start_streaming();
+    function startStreaming(this)
+      % startStreaming  Start streaming data from myo_mex
+      assert(isempty(this.timerStreamingData),...
+        'MyoMex is already streaming.');
+      this.timerStreamingData = timer(...
+        'busymode','drop',...
+        'executionmode','fixedrate',...
+        'name','MyoMex-timerStreamingData',...
+        'period',this.DEFAULT_STREAMING_FRAME_TIME,...
+        'startdelay',this.DEFAULT_STREAMING_FRAME_TIME,...
+        'timerfcn',@(src,evt)this.timerStreamingDataCallback(src,evt));
+      [fail,emsg] = this.myo_mex_start_streaming();
       if fail
-        m.is_streaming = false;
+        delete(this.timerStreamingData);
+        this.timerStreamingData = [];
         warning('myo_mex start_streaming failed with message\n\t''%s''',emsg);
-        delete(m.TimerStreamingData);
-        m.TimerStreamingData = [];
         return;
       end
-      
-      start(m.TimerStreamingData);
-      m.streaming_data_init_time = true;
-      
+      start(this.timerStreamingData);
     end
     
-    function stopStreaming(m)
-      % stopStreaming  Stop streaming data
-      %   This method terminates streaming mode, and is expected to return
-      %   all buffered data stored in the MEX function myo_mex.
-      if ~m.is_streaming, return; end
-      
-      [fail,emsg] = m.myo_mex_stop_streaming();
-      if fail
-        error('myo_mex stop_streaming failed with message\n\t''%s''',emsg);
-      end
-      
-      stop(m.TimerStreamingData);
-      delete(m.TimerStreamingData);
-      m.TimerStreamingData = [];
-      m.is_streaming = false;
-      
+    function stopStreaming(this)
+      % stopStreaming  Stop streaming data from myo_mex
+      assert(~isempty(this.timerStreamingData),...
+        'MyoMex is not streaming.');
+      stop(this.timerStreamingData);
+      delete(this.timerStreamingData);
+      this.timerStreamingData = [];
+      [fail,emsg] = this.myo_mex_stop_streaming();
+      assert(~fail,...
+        'myo_mex stop_streaming failed with message\n\t''%s''',emsg);
     end
     
-    
-    function timerStreamingDataCallback(m,~,~)
-      
-      [fail,emsg,data] = m.myo_mex_get_streaming_data();
-      
-      % bail if getting data failed
-      if fail, return; end
-      
-      
-      % Then push addData to all existing
-      for ii=1:length(data)
-        m.myo_data(ii).addData(data(ii));
-      end
-      
+    function timerStreamingDataCallback(this,~,~)
+      % timerStreamingDataCallback  Fetch streaming data from myo_mex
+      %   MyoMex.timerStreamingData triggers this callback to schedule
+      %   regular fetching of the data from the Myo devices in myo_mex.
+      %   Subsequently, the fetched data is sent into myoData for logging
+      %   and future access.
+      %
+      %   If an error is thrown by myo_mex during a call
+      %   into get_streaming_data, then the callback cleans up myo_mex and
+      %   MyoMex, thus invalidating this object. This is known to happen
+      %   when a Myo device goes to sleep. Applications built on MyoMex
+      %   should manage the MyoMex lifetime around scenarios in which the
+      %   Myo is being utilized by the user.
+      [fail,emsg,data] = this.myo_mex_get_streaming_data();
+      if fail, this.delete(); end
+      assert(~fail,...
+        'myo_mex get_streaming_data failed with message\n\t''%s''\n%s',emsg,...
+        sprintf('MyoMex has been cleaned up and destroyed.'));
+      this.myoData.addData(data,this.currTime);
     end
     
   end

@@ -23,8 +23,9 @@
 #define GYRO_FIELD_NUM        1
 #define ACCEL_FIELD_NUM       2
 #define EMG_FIELD_NUM         3
-#define NUM_FIELDS            4
-const char* output_fields[] = {"quat","gyro","accel","emg"};
+#define POSE_FIELD_NUM        4
+#define NUM_FIELDS            5
+const char* output_fields[] = {"quat","gyro","accel","emg","pose"};
 
 // program behavior parameters
 #define STREAMING_TIME   5L
@@ -78,6 +79,7 @@ void makeOutputIMU(mxArray *outData[], unsigned int sz) {
 }
 void makeOutputEMG(mxArray *outData[], unsigned int sz) {
   outData[EMG_FIELD_NUM]         = mxCreateNumericMatrix(sz,8,mxDOUBLE_CLASS,mxREAL);
+  outData[POSE_FIELD_NUM]        = mxCreateNumericMatrix(sz,1,mxDOUBLE_CLASS,mxREAL);
 }
 void fillOutputIMU(FrameIMU f, mxArray *outData[],
         unsigned int row,unsigned int sz) {
@@ -97,6 +99,7 @@ void fillOutputEMG(FrameEMG f, mxArray *outData[],
   int jj = 0;
   for (jj;jj<8;jj++)
     *( mxGetPr(outData[EMG_FIELD_NUM]) + row+sz*jj ) = f.emg[jj];
+  *( mxGetPr(outData[POSE_FIELD_NUM]) + row )        = f.pose.type();
 }
 // Assigns Myo data in matrices d to element id of struct s
 void assnOutputStruct(mxArray *s, mxArray *d[], int id) {
@@ -196,7 +199,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
             countMyos);
     
     if ( countMyos != countMyosRequired )
-      mexErrMsgTxt("myo_mex countMyos is inconsistent with initialization.");
+      mexErrMsgTxt("myo_mex countMyos is inconsistent with initialization... We lost a Myo!");
     
     unsigned int iiIMU1=0;
     unsigned int iiEMG1=0;
