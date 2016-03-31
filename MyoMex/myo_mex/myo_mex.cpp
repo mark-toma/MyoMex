@@ -24,8 +24,10 @@
 #define ACCEL_FIELD_NUM       2
 #define EMG_FIELD_NUM         3
 #define POSE_FIELD_NUM        4
-#define NUM_FIELDS            5
-const char* output_fields[] = {"quat","gyro","accel","emg","pose"};
+#define ARM_FIELD_NUM         5
+#define XDIR_FIELD_NUM        6
+#define NUM_FIELDS            7
+const char* output_fields[] = {"quat","gyro","accel","emg","pose","arm","xDir"};
 
 // program behavior parameters
 #define STREAMING_TIME   5L
@@ -80,6 +82,8 @@ void makeOutputIMU(mxArray *outData[], unsigned int sz) {
 void makeOutputEMG(mxArray *outData[], unsigned int sz) {
   outData[EMG_FIELD_NUM]         = mxCreateNumericMatrix(sz,8,mxDOUBLE_CLASS,mxREAL);
   outData[POSE_FIELD_NUM]        = mxCreateNumericMatrix(sz,1,mxDOUBLE_CLASS,mxREAL);
+  outData[ARM_FIELD_NUM]         = mxCreateNumericMatrix(sz,1,mxDOUBLE_CLASS,mxREAL);
+  outData[XDIR_FIELD_NUM]        = mxCreateNumericMatrix(sz,1,mxDOUBLE_CLASS,mxREAL);
 }
 void fillOutputIMU(FrameIMU f, mxArray *outData[],
         unsigned int row,unsigned int sz) {
@@ -99,7 +103,9 @@ void fillOutputEMG(FrameEMG f, mxArray *outData[],
   int jj = 0;
   for (jj;jj<8;jj++)
     *( mxGetPr(outData[EMG_FIELD_NUM]) + row+sz*jj ) = f.emg[jj];
-  *( mxGetPr(outData[POSE_FIELD_NUM]) + row )        = f.pose.type();
+  *( mxGetPr(outData[POSE_FIELD_NUM])  + row )       = f.pose.type();
+  *( mxGetPr(outData[ARM_FIELD_NUM])   + row )       = f.arm;
+  *( mxGetPr(outData[XDIR_FIELD_NUM])  + row )       = f.xDir;
 }
 // Assigns Myo data in matrices d to element id of struct s
 void assnOutputStruct(mxArray *s, mxArray *d[], int id) {
@@ -245,9 +251,9 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
         while ( (iiIMU1<szIMU1) || (iiEMG1<szEMG1) || (iiIMU2<szIMU2) || (iiEMG2<szEMG2) )
         {
           if (iiIMU1<szIMU1) {
-            DB_MYO_MEX("myo_mex get_streaming_data:\n\tgetFrameIMU1\n");
+            //DB_MYO_MEX("myo_mex get_streaming_data:\n\tgetFrameIMU1\n");
             frameIMU1 = collector.getFrameIMU(1);
-            DB_MYO_MEX("myo_mex get_streaming_data:\n\tfillOutputIMU1\n");
+            //DB_MYO_MEX("myo_mex get_streaming_data:\n\tfillOutputIMU1\n");
             fillOutputIMU(frameIMU1,outData1,iiIMU1,szIMU1);
             iiIMU1++;
           }
@@ -283,7 +289,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
         mexErrMsgTxt("Acquired abandoned lock\n");
         break;
     }
-    DB_MYO_MEX("myo_mex get_streaming_data:\nAssigning output struct\n");
+    DB_MYO_MEX("myo_mex get_streaming_data:\n\tAssigning output struct\n");
     // assign output matrices to struct array
     plhs[DATA_STRUCT_OUT_NUM] = mxCreateStructMatrix(1,countMyos,NUM_FIELDS,output_fields);
     DB_MYO_MEX("myo_mex get_streaming_data:\nAssigning outData1\n");

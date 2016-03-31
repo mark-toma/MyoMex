@@ -18,6 +18,8 @@ classdef MyoData < handle
     timeEMG = [];
     emg = [];
     pose = [];
+    arm = [];
+    xDir = [];
     
     pose_rest;
     pose_fist;
@@ -27,6 +29,13 @@ classdef MyoData < handle
     pose_double_tap;
     pose_unknown;
     
+    arm_left;
+    arm_right;
+    arm_unknown;
+    
+    xDir_wrist;
+    xDir_elbow;
+    xDir_unknown;
   end
   
   properties (SetAccess=private,Hidden=true)
@@ -36,17 +45,18 @@ classdef MyoData < handle
     gyro_fixed_log  = [];
     accel_log       = [];
     accel_fixed_log = [];
-    timeEMG_log    = [];
+    timeEMG_log     = [];
     emg_log         = [];
     pose_log        = [];
-    
-    POSE_NUM_REST           = 0;
-    POSE_NUM_FIST           = 1;
-    POSE_NUM_WAVE_IN        = 2;
-    POSE_NUM_WAVE_OUT       = 3;
-    POSE_NUM_FINGERS_SPREAD = 4;
-    POSE_NUM_DOUBLE_TAP     = 5;
-    POSE_NUM_UNKNOWN        = hex2dec('ffff');
+    arm_log         = [];
+    xDir_log        = [];
+    POSE_REST           = 0;
+    POSE_FIST           = 1;
+    POSE_WAVE_IN        = 2;
+    POSE_WAVE_OUT       = 3;
+    POSE_FINGERS_SPREAD = 4;
+    POSE_DOUBLE_TAP     = 5;
+    POSE_UNKNOWN        = hex2dec('ffff');
   end
   
   properties (Dependent)
@@ -61,12 +71,28 @@ classdef MyoData < handle
     pose_wave_out_log;
     pose_fingers_spread_log;
     pose_double_tap_log;
-    pose_unknown_log;
+    pose_unknown_log;   
+    arm_left_log;
+    arm_right_log;
+    arm_unknown_log;
+    xDir_wrist_log;
+    xDir_elbow_log;
+    xDir_unknown_log;
   end
   
   properties (Access=private,Hidden=true)
     prevTimeIMU = [];
     prevTimeEMG = [];
+    
+    % libmyo.h enum order: right, left, unknown
+    % DeviceListener.hpp  enum order: left, right, unknown
+    ARM_RIGHT     = 0;
+    ARM_LEFT      = 1;
+    ARM_UNKNOWN   = 2;
+    
+    XDIR_WRIST    = 0;
+    XDIR_ELBOW    = 1;
+    XDIR_UNKNOWN  = 2;
     
     IMU_SAMPLE_TIME = 0.020; %  50Hz
     EMG_SAMPLE_TIME = 0.005; % 200Hz
@@ -75,17 +101,21 @@ classdef MyoData < handle
   end
   
   methods
-    
+    %% --- Object Management
     function this = MyoData(countMyos)
-      
+      % MyoData  Instantiate a vector of MyoData objects
+      %   A MyoData object represents the data for a unique physical Myo
+      %   device. These objects are used by MyoMex to store and interact
+      %   with data as it's collected from a device. This constructor takes
+      %   one scalar number, countMyos, to instantiate a vector of objects
+      %   with this length. The resulting length of MyoData is at least 1.
       if nargin<1
         countMyos = 0;
       end
       
-      if ~isnumeric(countMyos) || ~isscalar(countMyos) || mod(countMyos,1) || (countMyos<0)
-        error('Input countMyos must be numeric scalar in {0,1,2,...}.');
-      end
-      
+      assert(isnumeric(countMyos) && isscalar(countMyos) && ~mod(countMyos,1),...
+        'Input countMyos must be numeric scalar in {0,1,2,...}.');
+            
       if countMyos > 0
         this(countMyos) = MyoData();
       end
@@ -96,6 +126,7 @@ classdef MyoData < handle
       
     end
     
+    %% --- Dependent Getters
     function val = get.rot(this)
       if isempty(this.quat)
         val = [];
@@ -111,48 +142,85 @@ classdef MyoData < handle
       val = this.q2r(this.quat);
     end
     function val = get.pose_rest(this)
-      val = this.pose == this.POSE_NUM_REST;
+      val = this.pose == this.POSE_REST;
     end
     function val = get.pose_fist(this)
-      val = this.pose == this.POSE_NUM_FIST;
+      val = this.pose == this.POSE_FIST;
     end
     function val = get.pose_wave_in(this)
-      val = this.pose == this.POSE_NUM_WAVE_IN;
+      val = this.pose == this.POSE_WAVE_IN;
     end
     function val = get.pose_wave_out(this)
-      val = this.pose == this.POSE_NUM_WAVE_OUT;
+      val = this.pose == this.POSE_WAVE_OUT;
     end
     function val = get.pose_fingers_spread(this)
-      val = this.pose == this.POSE_NUM_FINGERS_SPREAD;
+      val = this.pose == this.POSE_FINGERS_SPREAD;
     end
     function val = get.pose_double_tap(this)
-      val = this.pose == this.POSE_NUM_DOUBLE_TAP;
+      val = this.pose == this.POSE_DOUBLE_TAP;
     end
     function val = get.pose_unknown(this)
-      val = this.pose == this.POSE_NUM_UNKNOWN;
+      val = this.pose == this.POSE_UNKNOWN;
     end
     function val = get.pose_rest_log(this)
-      val = this.pose_log == this.POSE_NUM_REST;
+      val = this.pose_log == this.POSE_REST;
     end
     function val = get.pose_fist_log(this)
-      val = this.pose_log == this.POSE_NUM_FIST;
+      val = this.pose_log == this.POSE_FIST;
     end
     function val = get.pose_wave_in_log(this)
-      val = this.pose_log == this.POSE_NUM_WAVE_IN;
+      val = this.pose_log == this.POSE_WAVE_IN;
     end
     function val = get.pose_wave_out_log(this)
-      val = this.pose_log == this.POSE_NUM_WAVE_OUT;
+      val = this.pose_log == this.POSE_WAVE_OUT;
     end
     function val = get.pose_fingers_spread_log(this)
-      val = this.pose_log == this.POSE_NUM_FINGERS_SPREAD;
+      val = this.pose_log == this.POSE_FINGERS_SPREAD;
     end
     function val = get.pose_double_tap_log(this)
-      val = this.pose_log == this.POSE_NUM_DOUBLE_TAP;
+      val = this.pose_log == this.POSE_DOUBLE_TAP;
     end
     function val = get.pose_unknown_log(this)
-      val = this.pose_log == this.POSE_NUM_UNKNOWN;
+      val = this.pose_log == this.POSE_UNKNOWN;
     end
-        
+    function val = get.arm_right(this)
+      val = this.arm == this.ARM_RIGHT;
+    end
+    function val = get.arm_left(this)
+      val = this.arm == this.ARM_LEFT;
+    end
+    function val = get.arm_unknown(this)
+      val = this.arm == this.ARM_UNKNOWN;
+    end
+    function val = get.arm_right_log(this)
+      val = this.arm_log == this.ARM_RIGHT;
+    end
+    function val = get.arm_left_log(this)
+      val = this.arm_log == this.ARM_LEFT;
+    end
+    function val = get.arm_unknown_log(this)
+      val = this.arm_log == this.ARM_UNKNOWN;
+    end
+    function val = get.xDir_wrist(this)
+      val = this.xDir == this.XDIR_WRIST;
+    end
+    function val = get.xDir_elbow(this)
+      val = this.xDir == this.XDIR_ELBOW;
+    end
+    function val = get.xDir_unknown(this)
+      val = this.xDir == this.XDIR_UNKNOWN;
+    end
+    function val = get.xDir_wrist_log(this)
+      val = this.xDir_log == this.XDIR_WRIST;
+    end
+    function val = get.xDir_elbow_log(this)
+      val = this.xDir_log == this.XDIR_ELBOW;
+    end
+    function val = get.xDir_unknown_log(this)
+      val = this.xDir_log == this.XDIR_UNKNOWN;
+    end
+    
+    %% --- 
     function clearLogs(this)
       % clearLogs  Clears logged data
       %   Sets all <data>_log properties to the empty matrix. Do not call
@@ -167,6 +235,8 @@ classdef MyoData < handle
         this(ii).timeEMG_log     = [];
         this(ii).emg_log         = [];
         this(ii).pose_log        = [];
+        this(ii).arm_log         = [];
+        this(ii).xDir_log        = [];
       end
     end
     
@@ -174,10 +244,16 @@ classdef MyoData < handle
 
     function stopStreaming(this), this.isStreaming = false; end
     
+  end
+  
+  methods (Access={?MyoMex})
+    %% --- Data Provider Access
     function addData(this,data,currTime)
       % addData  Adds new data
       assert(length(this)==length(data),...
         'Input data must be the same length as MyoData');
+      data(1)
+      data(2)
       for ii=1:length(this)
         this(ii).addDataIMU(data(ii),currTime);
         this(ii).addDataEMG(data(ii),currTime);
@@ -187,7 +263,7 @@ classdef MyoData < handle
   end
   
   methods (Access=private)
-    
+    %% --- Internal Data Management
     function addDataIMU(this,data,currTime)
       if isempty(data.quat), return; end
       
@@ -220,7 +296,6 @@ classdef MyoData < handle
       
     end
     
-    
     function addDataEMG(this,data,currTime)
       if isempty(data.emg), return; end
       
@@ -236,12 +311,16 @@ classdef MyoData < handle
       
       e = data.emg./this.EMG_SCALE;
       p = data.pose;
+      a = data.arm;
+      x = data.xDir;
 
       this.timeEMG = t(end,:);
       this.emg = e(end,:);
       this.pose = p(end,:);
+      this.arm = a(end,:);
+      this.xDir = x(end,:);
       
-      if this.isStreaming, this.pushLogsEMG(t,e,p); end
+      if this.isStreaming, this.pushLogsEMG(t,e,p,a,x); end
       
     end
     
@@ -254,15 +333,19 @@ classdef MyoData < handle
       this.accel_fixed_log = [ this.accel_fixed_log ; af ];
     end
     
-    function pushLogsEMG(this,t,e,p)
+    function pushLogsEMG(this,t,e,p,a,x)
+            fprintf('adddataemg\n');
       this.timeEMG_log   = [ this.timeEMG_log ; t ];
       this.emg_log       = [ this.emg_log     ; e ];
       this.pose_log      = [ this.pose_log    ; p ];
+      this.arm_log       = [ this.arm_log     ; a ];
+      this.xDir_log      = [ this.xDir_log    ; x ];
     end
+    
   end
   
   methods (Static=true)
-    
+    %% --- Quaternion Operations
     function qn = qRenorm(q)
       % qRenorm  Normalized quaternion q to unit magnitude in qn
       n = sqrt(sum(q'.^2))'; % column vector of quaternion norms

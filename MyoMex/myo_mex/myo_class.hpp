@@ -34,16 +34,10 @@ struct FrameIMU
 struct FrameEMG
 {
   std::array<int8_t,8> emg;
-  myo::Pose pose;
+  myo::Pose            pose;
+  myo::Arm             arm;
+  myo::XDirection      xDir;
 }; // FrameEMG
-
-// Meta data frame
-struct FrameMeta
-{
-  bool onArm;
-  bool isUnlocked;
-  bool whichArm;
-}; // FrameMeta
 
 // END Data Frames
 
@@ -60,7 +54,6 @@ class MyoData
   // Data frames for returning data samples
   FrameIMU frameIMU;
   FrameEMG frameEMG;
-  FrameMeta frameMeta;
   
   // Pointer to a Myo device instance provided by hub
   myo::Myo* pMyo;
@@ -75,6 +68,8 @@ class MyoData
   // EMG data queues and state information
   std::queue<std::array<int8_t,8>,std::deque<std::array<int8_t,8>>> emg;
   std::queue<myo::Pose,std::deque<myo::Pose>> pose;
+  std::queue<myo::Arm,std::deque<myo::Arm>> arm;
+  std::queue<myo::XDirection,std::deque<myo::XDirection>> xDir;
   unsigned int semEMG;
   unsigned int countEMG;
   uint64_t timestampEMG;
@@ -113,15 +108,39 @@ class MyoData
     }
     countEMG++;
     timestampEMG = ts;
-    // fill pose up to the new countEMG
+    // fill pose, arm, and xDir up to the new countEMG
     myo::Pose p = pose.back();
     while ( pose.size()<countEMG ) { pose.push(p); }
+    myo::Arm a = arm.back();
+    while ( arm.size()<countEMG ) { arm.push(a); }
+    myo::XDirection x = xDir.back();
+    while ( xDir.size()<countEMG ) { xDir.push(x); }
+    
   }
   
-  void syncPose(uint64_t ts)
+  bool syncPose(uint64_t ts)
   {
+    if (pose.size() == emg.size())
+      return false;
     myo::Pose p = pose.back();
     while ( pose.size()<(countEMG-1) ) { pose.push(p); }
+    return true;
+  }
+  bool syncArm(uint64_t ts)
+  {
+    if (arm.size() == emg.size())
+      return false;
+    myo::Arm a = arm.back();
+    while ( arm.size()<(countEMG-1) ) { arm.push(a); }
+    return true;
+  }
+  bool syncXDir(uint64_t ts)
+  {
+    if (xDir.size() == emg.size())
+      return false;
+    myo::XDirection x = xDir.back();
+    while ( xDir.size()<(countEMG-1) ) { xDir.push(x); }
+    return true;
   }
   
 public:
@@ -138,16 +157,23 @@ public:
     pMyo->unlock(myo::Myo::unlockHold);
     
     // fill up the other private members
-    myo::Quaternion<float> q; // dummy default objects
-    myo::Vector3<float> g;
-    myo::Vector3<float> a;
-    std::array<int8_t,8> e;
-    myo::Pose p;
-    quat.push(q);        // push them back onto queues
-    gyro.push(g);
-    accel.push(a);
-    emg.push(e);
-    pose.push(p);
+    myo::Quaternion<float> _quat; // dummy default objects
+    myo::Vector3<float> _gyro;
+    myo::Vector3<float> _accel;
+    std::array<int8_t,8> _emg;
+    //myo::Pose _pose = myo::Pose::unknown;
+    //myo::Arm _arm = myo::Arm::armUnknown;
+    //myo::XDirection _xDir = myo::XDirection::xDirectionUnknown;
+    quat.push(_quat);        // push them back onto queues
+    gyro.push(_gyro);
+    accel.push(_accel);
+    emg.push(_emg);
+    //pose.push(_pose);
+    //arm.push(_arm);
+    //xDir.push(_xDir);
+    pose.push(myo::Pose::unknown);
+    arm.push(myo::armUnknown);
+    xDir.push(myo::xDirectionUnknown);
     
     timestampIMU = timestamp;
     timestampEMG = timestamp;
@@ -171,10 +197,14 @@ public:
   FrameEMG &getFrameEMG()
   {
     countEMG = countEMG - 1;
-    frameEMG.emg     = emg.front();
-    frameEMG.pose    = pose.front();
+    frameEMG.emg  = emg.front();
+    frameEMG.pose = pose.front();
+    frameEMG.arm  = arm.front();
+    frameEMG.xDir = xDir.front();
     emg.pop();
     pose.pop();
+    arm.pop();
+    xDir.pop();
     return frameEMG;
   }
   
@@ -222,12 +252,22 @@ public:
     emg.push(tmp);
   }
   
-  void addPose(myo::Pose _p, uint64_t timestamp)
+  void addPose(myo::Pose _pose, uint64_t timestamp)
   {
-    syncPose(timestamp);
-    pose.push(_p);
+    if ( syncPose(timestamp) )
+      pose.push(_pose);
   }
   
+  void addArm(myo::Arm _arm, uint64_t timestamp)
+  {
+    if ( syncArm(timestamp) )
+      arm.push(_arm);
+  }
+  void addXDir(myo::XDirection _xDir, uint64_t timestamp)
+  {
+    if ( syncXDir(timestamp) )
+      xDir.push(_xDir);
+  }
 }; // MyoData
 
 // END MyoData
@@ -342,8 +382,20 @@ public:
   
   //void onUnpair(myo::Myo* myo, uint64_t timestamp) {}
   
-  //void onArmSync(myo::Myo* myo, uint64_t timestamp, myo::Arm arm, myo::XDirection xDirection) {}
-  //void onArmUnsync(myo::Myo* myo, uint64_t timestamp) {}
+  void onArmSync(myo::Myo* myo, uint64_t timestamp, myo::Arm arm, myo::XDirection xDirection) {
+    if (!addDataEnabled) { return; }
+    knownMyos[getMyoID(myo,timestamp)-1]->addArm(arm,timestamp);
+    knownMyos[getMyoID(myo,timestamp)-1]->addXDir(xDirection,timestamp);
+  }
+  
+  void onArmUnsync(myo::Myo* myo, uint64_t timestamp) {
+    if (!addDataEnabled) { return; }
+    // infer state changes of arm and xdir
+    myo::Arm newArm = myo::Arm::armUnknown;
+    myo::XDirection newXDir = myo::XDirection::xDirectionUnknown;
+    knownMyos[getMyoID(myo,timestamp)-1]->addArm(newArm,timestamp);
+    knownMyos[getMyoID(myo,timestamp)-1]->addXDir(newXDir,timestamp);
+  }
   //void onUnlock(myo::Myo* myo, uint64_t timestamp) {}
   
 }; // DataCollector
