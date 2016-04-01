@@ -23,7 +23,6 @@ classdef MyoData < handle
   %   m.gyro_fixed  % fixed frame gyro  - computed from gyro and quat
   %   m.accel       % sensor frame accel
   %   m.accel_fixed % fixed frame accel - computed from accel and quat
-  
   %
   %   m.timeEMG % corresponds to all other data listed below
   %   m.emg
@@ -59,100 +58,187 @@ classdef MyoData < handle
     
   properties (SetAccess = private)
     
+    % timeIMU  Time of sampling for IMU data
+    %   This is the time at which the inertial measurement unit (IMU) data
+    %   is sampled (at 50Hz). The Myo's IMU data includes quat, gyro, and
+    %   accel. Other data such as rot, gyro_fixed, and accel_fixed are
+    %   computed from the IMU data.
+    %
+    % See also:
+    %   quat, gyro, accel, rot, gyro_fixed, accel_fixed
     timeIMU
+    % quat  Quaternion representing orientation of Myo
+    %   This is a 1x4 array of unit quaternion elements with the scalar
+    %   part listed first. That is, if q = s + vx*i + vy*j + vz*k, then
+    %   quat = [s,vx,vy,vz]. 
+    %
+    %   Furthermore, the interpretation of quat as a
+    %   rotation or transformation depends on the definition of quaternion
+    %   rotation. In this implementation, we obtain the vector r by
+    %   rotating a vector p by quaternion q using typical quaternion
+    %   multiplication such that [0;r] = q*[0;p]*q^-1. In this sense, quat
+    %   rotates vector p from components in the sensor frame to components
+    %   in the fixed frame of reference. Such a linear transformation is
+    %   also obtained by premultiplication of p by the rotation matrix rot.
+    %
+    % See also:
+    %   rot, q2r, qRot, qMult, qInv, qRenorm
     quat
+    % gyro  Gyroscope data in sensor frame [deg/s]
+    %   This is a 1x3 array of body angular velocity components represented
+    %   in Myo's sensor frame. Fixed frame gyro data is computed and stored
+    %   in gyro_fixed.
+    %
+    % See also:
+    %   gyro_fixed
     gyro
+    % gyro_fixed  Gyroscope data in fixed frame [deg/s]
+    %   Computed from quat (or rot) and gyro.
+    %
+    % See also:
+    %   quat, rot, gyro
     gyro_fixed
+    % accel  Accelerometer data in sensor frame [g]
+    %   This is a 1x3 array of measured acceleration due to gravity with
+    %   components represented in Myo's sensor frame. Fixed frame accel data is
+    %   computed and stored in accel_fixed.
+    %
+    % See also:
+    %   accel_fixed
     accel
+    % accel_fixed  Accelerometer data in fixed frame [g]
+    %   Computed from quat (or rot) and accel.
+    %
+    % See also:
+    %   quat, rot, accel
     accel_fixed
     
+    % timeEMG  Time of sampling for sEMG data
+    %   This is the time at which the sEMG data is sampled (at 200Hz).
+    %   Other data such as pose, arm, and xDir are also sampled on this
+    %   time base.
+    %
+    % See also:
+    %   emg, pose, arm, xDir
     timeEMG
+    % emg  Raw data from 8 surface EMG (sEMG) sensors
+    %   This is a 1x8 array of sEMG data in the range [-1,1] sampled at a
+    %   rate of 200Hz.
     emg
+    % pose  Indicates the currently detected gesture (enum)
+    %   This is an enumerated value. Access logical indication of a
+    %   particular pose with the pose_suffix properties where suffix is the
+    %   name of the pose.
+    %
+    % See also:
+    %   pose_rest, pose_fist, pose_wave_in, pose_wave_out,
+    %   pose_fingers_spread, pose_double_tap, pose_unknown
     pose
-    
-    arm
-    xDir
-    
-    pose_rest
-    pose_fist
-    pose_wave_in
-    pose_wave_out
-    pose_fingers_spread
-    pose_double_tap
-    pose_unknown
-    
-    arm_left
-    arm_right
-    arm_unknown
-    
-    xDir_wrist
-    xDir_elbow
-    xDir_unknown
-    
-    isStreaming = true;
-    
+    pose_rest % Indicates  pose from enum value in pose (logical)
+    pose_fist % Indicates  pose from enum value in pose (logical)
+    pose_wave_in % Indicates  pose from enum value in pose (logical)
+    pose_wave_out % Indicates  pose from enum value in pose (logical)
+    pose_fingers_spread % Indicates  pose from enum value in pose (logical)
+    pose_double_tap % Indicates  pose from enum value in pose (logical)
+    pose_unknown % Indicates  pose from enum value in pose (logical)
+    % arm  Indicates which arm Myo is worn on by the user (enum)
+    %   This is an enumerated value. Access logical indication of a
+    %   particular arm with the arm_suffix properties where suffix is the
+    %   name of the arm.
+    %
+    % See also:
+    %   arm_right, arm_left, arm_unknown
+    arm % Indicates which arm Myo is worn on by the user (enum)
+    arm_left % Indicates arm from enum value in arm (logical)
+    arm_right % Indicates arm from enum value in arm (logical)
+    arm_unknown % Indicates arm from enum value in arm (logical)
+    % xDir  Indicates direction of Myo sensor x-axis on user's arm (enum)
+    %   This is an enumerated value. Access logical indication of a
+    %   particular xDir with the xDir_suffix properties where suffix is the
+    %   name of the xDir.
+    %
+    % See also:
+    %   xDir_wrist, xDir_elbow, xDir_unknown
+    xDir % Indicates direction of Myo sensor x-axis on user's arm (enum)
+    xDir_wrist % Indicates xDir from enum value in xDir (logical)
+    xDir_elbow % Indicates xDir from enum value in xDir (logical)
+    xDir_unknown % Indicates xDir from enum value in xDir (logical)
+    % isStreaming  Indicates status of data logging (logical)
+    %   This state is toggled by methods startStreaming and
+    %   stopStreaming
+    %
+    % See also:
+    %   startStreaming, stopStreaming
+    isStreaming = true
   end
   
   properties (SetAccess=private,Hidden=true)
-    timeIMU_log     = [];
-    quat_log        = [];
-    gyro_log        = [];
-    gyro_fixed_log  = [];
-    accel_log       = [];
-    accel_fixed_log = [];
-    timeEMG_log     = [];
-    emg_log         = [];
-    pose_log        = [];
-    arm_log         = [];
-    xDir_log        = [];
-    POSE_REST           = 0;
-    POSE_FIST           = 1;
-    POSE_WAVE_IN        = 2;
-    POSE_WAVE_OUT       = 3;
-    POSE_FINGERS_SPREAD = 4;
-    POSE_DOUBLE_TAP     = 5;
-    POSE_UNKNOWN        = hex2dec('ffff');
+    timeIMU_log
+    quat_log
+    gyro_log
+    gyro_fixed_log
+    accel_log       
+    accel_fixed_log 
+    timeEMG_log     
+    emg_log         
+    pose_log        
+    arm_log         
+    xDir_log        
+    POSE_REST           = 0
+    POSE_FIST           = 1
+    POSE_WAVE_IN        = 2
+    POSE_WAVE_OUT       = 3
+    POSE_FINGERS_SPREAD = 4
+    POSE_DOUBLE_TAP     = 5
+    POSE_UNKNOWN        = hex2dec('ffff')
   end
   
   properties (Dependent)
+    % rot  Rotation matrix representing the orientation of Myo
+    %   This is a 3x3 orthonormal matrix. Computed from quat, this rotation
+    %   matrix transforms a 3x1 vector p from coordinates in the sensor
+    %   frame to a vector r with coordinates in the fixed frame according
+    %   to r = rot*p.
+    %
+    % See also:
+    %   quat, q2r, gyro, gyro_fixed, accel, accel_fixed
     rot;
   end
   
   properties (Dependent,Hidden=true)
-    rot_log;
-    pose_rest_log;
-    pose_fist_log;
-    pose_wave_in_log;
-    pose_wave_out_log;
-    pose_fingers_spread_log;
-    pose_double_tap_log;
-    pose_unknown_log;
-    arm_left_log;
-    arm_right_log;
-    arm_unknown_log;
-    xDir_wrist_log;
-    xDir_elbow_log;
-    xDir_unknown_log;
+    rot_log
+    pose_rest_log
+    pose_fist_log
+    pose_wave_in_log
+    pose_wave_out_log
+    pose_fingers_spread_log
+    pose_double_tap_log
+    pose_unknown_log
+    arm_left_log
+    arm_right_log
+    arm_unknown_log
+    xDir_wrist_log
+    xDir_elbow_log
+    xDir_unknown_log
   end
   
   properties (Access=private,Hidden=true)
-    prevTimeIMU = [];
-    prevTimeEMG = [];
+    prevTimeIMU 
+    prevTimeEMG 
     
     % libmyo.h enum order: right, left, unknown
     % DeviceListener.hpp  enum order: left, right, unknown
-    ARM_RIGHT     = 0;
-    ARM_LEFT      = 1;
-    ARM_UNKNOWN   = 2;
+    ARM_RIGHT     = 0
+    ARM_LEFT      = 1
+    ARM_UNKNOWN   = 2
     
-    XDIR_WRIST    = 0;
-    XDIR_ELBOW    = 1;
-    XDIR_UNKNOWN  = 2;
+    XDIR_WRIST    = 0
+    XDIR_ELBOW    = 1
+    XDIR_UNKNOWN  = 2
     
-    IMU_SAMPLE_TIME = 0.020; %  50Hz
-    EMG_SAMPLE_TIME = 0.005; % 200Hz
-    EMG_SCALE = 128;
-    RESTART_DELAY = 0.5;
+    IMU_SAMPLE_TIME = 0.020 %  50Hz
+    EMG_SAMPLE_TIME = 0.005 % 200Hz
+    EMG_SCALE       = 128
   end
   
   methods
