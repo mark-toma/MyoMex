@@ -1,78 +1,39 @@
 classdef MyoMex < handle
   % MyoMex  This is an m-code wrapper for a MEX wrapper for Myo SDK.
+  %   This class manages the state of the MEX function myo_mex which
+  %   provides the interface to Myo SDK, and thus the data from physical
+  %   Myo devices. MyoMex is the glue between the Myo SDK data and the
+  %   devices' MATLAB m-code objects of type MyoData.
   %
-  %   The class methods provide access to Myo functionality and raw data
-  %   while the class properties expose the data to the MATLAB workspace
-  %   and allow for configuration of some Myo program state.
+  %   Using MyoMex is very simple, (1) Instantiate MyoMex, (2) access
+  %   MyoData objects, and (3) clean up the MyoMex instance when done.
   %
-  %   The basic utility of the MyoMex object is that it provides a simple
-  %   programmatic interface to acquire raw data from Myo (in near-real
-  %   time) using either a polling or a streaming model without blocking
-  %   the MATLAB command line unecessarily.
+  % Example (minimal):
   %
-  % Example (polling data):
+  %  m = MyoMex(); % default expects one Myo paired with Myo Connect
+  %  pause(1);     % wait a second
+  %  m.myoData     % display the MyoData object
+  %  m.delete();   % destruct MyoMex (thus cleaning up myo_mex resources)
   %
-  %   m = MyoMex(); % instantiate
-  %   m.getData();  % poll for data
+  % More Information:
   %
-  %   % inspect most recent data
-  %   m.time
-  %   m.quat
-  %   m.gyro
-  %   m.accel
-  %   m.emg
-  %   m.pose
-  %   m.pose_rest
-  %   m.pose_fist
-  %   m.pose_wave_in
-  %   m.pose_wave_out
-  %   m.pose_fingers_spread
-  %   m.pose_double_tap
+  % MyoMex calls into myo_mex to initialize a data connection to Myo SDK at
+  % runtime. The MyoMex constructor take an optional input to specify the
+  % number of Myos expected in Myo SDK. Once successfully initialized,
+  % MyoMex will guarantee data from all Myos unless disconnected from
+  % MyoConnect. In that case, MyoMex terminates itself.
   %
-  %   m.delete(); % eplicitly clean up the MyoMex object
-  %   clear m
+  % After initialization of myo_mex, MyoMex then calls back into myo_mex to
+  % start a new worked thread. In the myo_mex environment, all samples of
+  % data from Myo SDK are queued in a FIFO buffer waiting for MyoMex to
+  % call back in and fetch the data.
   %
-  % Example (streaming Data):
-  %
-  %   m = MyoMex();
-  %
-  %   % Set desired sample time (reciprocal of rate) in seconds.
-  %   % This determines the rate at which data samples are polled from Myo
-  %   % SDK in the MEX function myo_mex.
-  %   m.streaming_data_time = 1/50;
-  %
-  %   % Set desired frame time (reciprocal of rate) in seconds
-  %   % This determined the rate at which the data buffer is fetched from
-  %   % the MEX function myo_mex as triggered by a MATLAB timer.
-  %   % This should always be greater than the streaming_data_time and is
-  %   % typically chosen to be no less than 0.040[s] or 40[ms].
-  %   m.streaming_frame_time = 1/25;
-  %
-  %   % Start streaming
-  %   % This starts a thread in the MEX function myo_mex that runs every
-  %   % streaming_data_time seconds. While this is happening, a MATLAB
-  %   % timer is automatically calling m.getData every streaming_frame_time
-  %   % seconds.
-  %   m.startStreaming();
-  %
-  %   % Inspect data
-  %   % While in streaming mode, the most recent data can be read from the
-  %   % properties used in the previous example. But additionally, this
-  %   % all data is pushed into properties with the same names and the
-  %   % suffix "_log"
-  %   m.time_log
-  %   m.quat_log
-  %   % ... and so on ...
-  %
-  %   % Stop streaming
-  %   m.stopStreaming();
-  %
-  %   % Plot some data
-  %   plot(this.time_log,m.accel_log,'-',m.time_log,m.emg_log,'-');
-  %
-  %   m.delete();
-  %   clear m
-  
+  % The last thing that happens in MyoMex construction is that a MATLAB
+  % timer is started. This timer schedules calls back into myo_mex to fetch
+  % data out of the FIFO. The timer callback then calls back into the
+  % MyoMex property myoData (a MyoData object) to provide it with the
+  % latest batch of samples.
+   
   properties (SetAccess = private)
     % myo_data  Data objects for physical Myo devices
     myoData;
@@ -81,16 +42,31 @@ classdef MyoMex < handle
     currTime;
   end
   properties (Access=private,Hidden=true)
-    timerStreamingData = [];
-    nowInit;
-    DEFAULT_STREAMING_FRAME_TIME = 0.040;
+    timerStreamingData
+    nowInit
+    DEFAULT_STREAMING_FRAME_TIME = 0.040
   end
   
   methods
     
     %% --- Object Management
     function this = MyoMex(countMyos)
-      % MyoMex  Construct a MyoMex object.
+      % MyoMex  Construct a MyoMex object
+      %   
+      % Inputs:
+      %   countMyos - Number of Myos
+      %     Numerical scalar specifying the number of physical Myo devices
+      %     expected to be found from Myo Connect. Construction will fail
+      %     if Myo Connect provides the Myo SDK with more or less Myos than
+      %     countMyos. This parameter is optional with a default value 1.
+      %
+      % Outputs:
+      %   this - Handle to MyoMex instance
+      %     The output argument is required! Users should maintain this
+      %     variable throughout the lifecycle of MyoMex and then explicitly
+      %     call the delete() method on the object when finished.
+      assert(nargout==1,...
+        'MyoMex must be assigned to an output variable.');      
       
       if nargin<1, countMyos = 1; end
       
@@ -281,7 +257,7 @@ classdef MyoMex < handle
       % implement these checks to raise awareness for users.
       %
       % If myo_mex is locked then somethings wrong with one of: user code,
-      % matlab, or mex api! Anywya, we try two different approches to
+      % matlab, or mex api! Anyway, we try two different approches to
       % returning myo_mex to an expected unlocked state and issue warnings
       % to inform the user of this process (and thus fill the command
       % window with ugliness to indicate that something is not right).
@@ -307,8 +283,8 @@ classdef MyoMex < handle
       if fail
         warning('myo_mex_delete failed with message:\n\t''%s''\n',emsg);
       else
-        % if it's still locked
-        if ~MyoMex.myo_mex_is_locked(), return; else error(emsg_bad_state); end
+        assert(~MyoMex.myo_mex_is_locked(),emsg_bad_state);
+        if ~MyoMex.myo_mex_is_locked(), return; end
       end
       
       % see if we can stop streaming then call delete

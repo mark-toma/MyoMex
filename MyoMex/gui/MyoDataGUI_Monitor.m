@@ -53,7 +53,7 @@ function MyoDataGUI_Monitor_OpeningFcn(hObject, eventdata, handles, varargin)
 % varargin   command line arguments to MyoDataGUI_Monitor (see VARARGIN)
 
 % constants
-handles.const.STRIP_TIME = 3;
+handles.const.STRIP_TIME = 2;
 handles.const.UPDATE_RATE = 25; % Hz
 handles.const.UPDATE_START_DELAY = 1; % s
 handles.const.STREAMING_DATA_TIME = 0.020; % [s] (50 Hz)

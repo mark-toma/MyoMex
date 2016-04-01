@@ -276,7 +276,7 @@ public:
 // --- DataCollector
 // implementation of object used to grab data from myo sdk api
 // this class is registered with the hub and its member functions are
-// called during hub.run(...) with relevant myo data
+// called during hub.runX(...) with relevant myo data
 class DataCollector : public myo::DeviceListener
 {
   

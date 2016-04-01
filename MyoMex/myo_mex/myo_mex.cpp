@@ -1,4 +1,3 @@
-
 // comment the following line to remove debug output via mexPrintf()
 //#define DEBUG_MYO_MEX
 #ifdef DEBUG_MYO_MEX
@@ -30,8 +29,8 @@
 const char* output_fields[] = {"quat","gyro","accel","emg","pose","arm","xDir"};
 
 // program behavior parameters
-#define STREAMING_TIME   5L
-#define INIT_DELAY 1000
+#define STREAMING_TIMEOUT    5L
+#define INIT_DELAY        1000
 #define RESTART_DELAY 500
 
 // program state
@@ -58,13 +57,10 @@ unsigned __stdcall runThreadFunc( void* pArguments ) {
     switch (dwWaitResult)
     {
       case WAIT_OBJECT_0: // The thread got ownership of the mutex
-        // holding lock
-        pHub->runOnce(STREAMING_TIME); // run callbacks to collector
-        // release lock
-        if (! ReleaseMutex(hMutex)) // release lock
-        {
-          return FALSE; // acquired bad mutex
-        }
+        // --- CRITICAL SECTION - holding lock
+        pHub->runOnce(STREAMING_TIMEOUT); // run callbacks to collector
+        // END CRITICAL SECTION - release lock
+        if (! ReleaseMutex(hMutex)) { return FALSE; } // acquired bad mutex
         break;
       case WAIT_ABANDONED:
         return FALSE; // acquired bad mutex
@@ -74,10 +70,20 @@ unsigned __stdcall runThreadFunc( void* pArguments ) {
   return 0;
 }
 
+// These functions allocate and assign mxArray to return output to MATLAB
+// Pseudo example usage:
+//   mxArray* outData[...];
+//   makeOutputXXX(outData,...);
+//   fillOutputXXX(outData,...);
+//   // then assign matrices in outData to a MATLAB struct
+//   plhs[...] = mxCreateStructMatrix(...);
+//   assnOutputStruct(plhs[...],outData,...);
+// Note: The size of outData must be consistent with hard code in the
+//   makeOutdataXXX and fillOutdataXXX functions.
 void makeOutputIMU(mxArray *outData[], unsigned int sz) {
-  outData[QUAT_FIELD_NUM]        = mxCreateNumericMatrix(sz,4,mxDOUBLE_CLASS,mxREAL);
-  outData[GYRO_FIELD_NUM]        = mxCreateNumericMatrix(sz,3,mxDOUBLE_CLASS,mxREAL);
-  outData[ACCEL_FIELD_NUM]       = mxCreateNumericMatrix(sz,3,mxDOUBLE_CLASS,mxREAL);
+  outData[QUAT_FIELD_NUM]   = mxCreateNumericMatrix(sz,4,mxDOUBLE_CLASS,mxREAL);
+  outData[GYRO_FIELD_NUM]   = mxCreateNumericMatrix(sz,3,mxDOUBLE_CLASS,mxREAL);
+  outData[ACCEL_FIELD_NUM]  = mxCreateNumericMatrix(sz,3,mxDOUBLE_CLASS,mxREAL);
 }
 void makeOutputEMG(mxArray *outData[], unsigned int sz) {
   outData[EMG_FIELD_NUM]         = mxCreateNumericMatrix(sz,8,mxDOUBLE_CLASS,mxREAL);
@@ -85,7 +91,7 @@ void makeOutputEMG(mxArray *outData[], unsigned int sz) {
   outData[ARM_FIELD_NUM]         = mxCreateNumericMatrix(sz,1,mxDOUBLE_CLASS,mxREAL);
   outData[XDIR_FIELD_NUM]        = mxCreateNumericMatrix(sz,1,mxDOUBLE_CLASS,mxREAL);
 }
-void fillOutputIMU(FrameIMU f, mxArray *outData[],
+void fillOutputIMU(mxArray *outData[], FrameIMU f,
         unsigned int row,unsigned int sz) {
   *( mxGetPr(outData[QUAT_FIELD_NUM])  + row+sz*0 ) = f.quat.w();
   *( mxGetPr(outData[QUAT_FIELD_NUM])  + row+sz*1 ) = f.quat.x();
@@ -98,7 +104,7 @@ void fillOutputIMU(FrameIMU f, mxArray *outData[],
   *( mxGetPr(outData[ACCEL_FIELD_NUM]) + row+sz*1 ) = f.accel.y();
   *( mxGetPr(outData[ACCEL_FIELD_NUM]) + row+sz*2 ) = f.accel.z();
 }
-void fillOutputEMG(FrameEMG f, mxArray *outData[],
+void fillOutputEMG(mxArray *outData[], FrameEMG f,
         unsigned int row,unsigned int sz) {
   int jj = 0;
   for (jj;jj<8;jj++)
@@ -107,7 +113,6 @@ void fillOutputEMG(FrameEMG f, mxArray *outData[],
   *( mxGetPr(outData[ARM_FIELD_NUM])   + row )       = f.arm;
   *( mxGetPr(outData[XDIR_FIELD_NUM])  + row )       = f.xDir;
 }
-// Assigns Myo data in matrices d to element id of struct s
 void assnOutputStruct(mxArray *s, mxArray *d[], int id) {
   int ii = 0;
   for (ii;ii<NUM_FIELDS;ii++) {
@@ -135,7 +140,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     if ( mexIsLocked() )
       mexErrMsgTxt("myo_mex is already initialized.\n");
     
-    
+    // Instantiate a Hub and get a Myo
     pHub = new myo::Hub("com.mark-toma.myo_mex");
     if ( !pHub )
       mexErrMsgTxt("Hub failed to init!");
@@ -144,38 +149,42 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       mexErrMsgTxt("Myo failed to init!");
     
     // configure myo and hub
-    DB_MYO_MEX("myo_mex init:\n\tConfiguring myo and hub\n");
     pHub->setLockingPolicy(myo::Hub::lockingPolicyNone);
     pHub->addListener(&collector);
     
     // instantiate mutex
-    DB_MYO_MEX("myo_mex init:\n\tSetting up mutex\n");
     hMutex = CreateMutex(NULL,FALSE,NULL);
     if (hMutex == NULL)
       mexErrMsgTxt("Failed to set up mutex.\n");
+    
+    // At this point we don't anticipate and errors, so we commit to
+    // locking this file's memory
+    // Note: The mexLock status is used to determine the initialization
+    //   state in other calls
     mexLock();
     
-    // wait briefly for Myo to come up
-    DB_MYO_MEX("myo_mex init:\n\tRunning hub\n");
+    // Let Hub run callbacks on collector so we can figure out how many
+    // Myos are connected to Myo Connect
     pHub->run(INIT_DELAY);
-    
     unsigned int countMyos = collector.getCountMyos();
-    DB_MYO_MEX("myo_mex init:\n\tNumber of Myos = %d\n",
-            countMyos);
     
+    // Flush the data queues with syncDataSources
+    // Note: This pops the oldest samples of data off the front of all 
+    //   queues until only the most recent data remains
     collector.syncDataSources();
-    DB_MYO_MEX("myo_mex init:\n\tData sources synchronized!\n");
     
-    // assign output num_myos
+    // Return countMyos to MATLAB workspace
+    // Note: The MATLAB code can be built to expect exactly this many Myos
+    //   worth of data
     plhs[NUM_MYOS_OUT_NUM] = mxCreateNumericMatrix(1,1,mxDOUBLE_CLASS,mxREAL);
     *mxGetPr(plhs[NUM_MYOS_OUT_NUM]) = countMyos;
     
-    // keep track of this value
+    // Hold onto countMyos in countMyosRequired
+    // Note: In future calls we error out if collector lost a Myo
     countMyosRequired = countMyos;
     
   } else if ( !strcmp("start_streaming",cmd) ) {
     // ----------------------------------------- myo_mex start_streaming --
-    
     if ( !mexIsLocked() )
       mexErrMsgTxt("myo_mex is not initialized.\n");
     if ( runThreadFlag )
@@ -200,108 +209,87 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     if ( nlhs>1 )
       mexErrMsgTxt("myo_mex too many outputs specified.\n");
     
+    // Verify that collector still has all of its Myos, otherwise error out
     unsigned int countMyos = collector.getCountMyos();
-    DB_MYO_MEX("myo_mex get_streaming_data:\n\tReading from %d Myos\n",
-            countMyos);
-    
     if ( countMyos != countMyosRequired )
       mexErrMsgTxt("myo_mex countMyos is inconsistent with initialization... We lost a Myo!");
     
-    unsigned int iiIMU1=0;
+    // Declarations and initializations and stuff
+    unsigned int iiIMU1=0; // Index into output matrices when reading queue
     unsigned int iiEMG1=0;
     unsigned int iiIMU2=0;
     unsigned int iiEMG2=0;
-    unsigned int szIMU1 = 0;
+    unsigned int szIMU1 = 0; // Size of samples to read from queue
     unsigned int szEMG1 = 0;
     unsigned int szIMU2 = 0;
     unsigned int szEMG2 = 0;
-    FrameIMU frameIMU1, frameIMU2;
+    FrameIMU frameIMU1, frameIMU2; // Data structures returned from queue read
     FrameEMG frameEMG1, frameEMG2;
+    
+    // Output matrices hold numeric data
     mxArray *outData1[NUM_FIELDS];
     mxArray *outData2[NUM_FIELDS];
     
-    // initialize output matrices for myo 1
+    // Initialize output matrices for myo 1
     szIMU1 = collector.getCountIMU(1)-1;
     szEMG1 = collector.getCountEMG(1)-1;
     makeOutputIMU(outData1,szIMU1);
     makeOutputEMG(outData1,szEMG1);
-    DB_MYO_MEX("myo_mex get_streaming_data:\n\tszIMU1=%u\tszEMG1=%u\n",
-            szIMU1,szEMG1);
     
-    // initialize output matrices for myo 2
+    // Initialize output matrices for myo 2
     if (countMyos>1) {
       szIMU2 = collector.getCountIMU(2)-1;
       szEMG2 = collector.getCountEMG(2)-1;
       makeOutputIMU(outData2,szIMU2);
       makeOutputEMG(outData2,szEMG2);
-      DB_MYO_MEX("myo_mex get_streaming_data:\n\tszIMU2=%u\tszEMG2=%u\n",
-              szIMU2,szEMG2);
     }
     
+    // Now get ahold of the lock and iteratively drain the queue while
+    // filling outDataN matrices
     DWORD dwWaitResult;
     dwWaitResult = WaitForSingleObject(hMutex,INFINITE);
-    DB_MYO_MEX("myo_mex get_streaming_data:\n\tAcquired lock\n");
     switch (dwWaitResult)
     {
       case WAIT_OBJECT_0: // The thread got ownership of the mutex
-        DB_MYO_MEX("myo_mex get_streaming_data:\n\tHolding lock\n");
-        // holding lock
-        DB_MYO_MEX("myo_mex get_streaming_data:\n\tEntering iterative read loop\n");
-        // read sz<src><id> elements out of each of these sources
-        while ( (iiIMU1<szIMU1) || (iiEMG1<szEMG1) || (iiIMU2<szIMU2) || (iiEMG2<szEMG2) )
-        {
-          if (iiIMU1<szIMU1) {
-            //DB_MYO_MEX("myo_mex get_streaming_data:\n\tgetFrameIMU1\n");
-            frameIMU1 = collector.getFrameIMU(1);
-            //DB_MYO_MEX("myo_mex get_streaming_data:\n\tfillOutputIMU1\n");
-            fillOutputIMU(frameIMU1,outData1,iiIMU1,szIMU1);
-            iiIMU1++;
-          }
-          if (iiEMG1<szEMG1) {
-            //DB_MYO_MEX("myo_mex get_streaming_data:\n\tgetFrameEMG1\n");
-            frameEMG1 = collector.getFrameEMG(1);
-            //DB_MYO_MEX("myo_mex get_streaming_data:\n\tfillOutputEMG1\n");
-            fillOutputEMG(frameEMG1,outData1,iiEMG1,szEMG1);
-            iiEMG1++;
-          }
-          if (iiIMU2<szIMU2) {
-            //DB_MYO_MEX("myo_mex get_streaming_data:\n\tgetFrameIMU2\n");
-            frameIMU2 = collector.getFrameIMU(2);
-            //DB_MYO_MEX("myo_mex get_streaming_data:\n\tfillOutputIMU2\n");
-            fillOutputIMU(frameIMU2,outData2,iiIMU2,szIMU2);
-            iiIMU2++;
-          }
-          if (iiEMG2<szEMG2) {
-            //DB_MYO_MEX("myo_mex get_streaming_data:\n\tgetFrameEMG2\n");
-            frameEMG2 = collector.getFrameEMG(2);
-            //DB_MYO_MEX("myo_mex get_streaming_data:\n\tfillOutputEMG2\n");
-            fillOutputEMG(frameEMG2,outData2,iiEMG2,szEMG2);
-            iiEMG2++;
-          }          
+        // --- CRITICAL SECTION - holding lock
+        while (iiIMU1<szIMU1) { // Read from Myo 1 IMU
+          frameIMU1 = collector.getFrameIMU(1);
+          fillOutputIMU(outData1,frameIMU1,iiIMU1,szIMU1);
+          iiIMU1++;
+        } 
+        while (iiEMG1<szEMG1) { // Read from Myo 1 EMG
+          frameEMG1 = collector.getFrameEMG(1);
+          fillOutputEMG(outData1,frameEMG1,iiEMG1,szEMG1);
+          iiEMG1++;
         }
-        DB_MYO_MEX("myo_mex get_streaming_data:\n\tReleasing lock\n");
-        // release lock if it was acquired
-        if ( !ReleaseMutex(hMutex)) // release lock
+        while (iiIMU2<szIMU2) { // Read from Myo 2 IMU
+          frameIMU2 = collector.getFrameIMU(2);
+          fillOutputIMU(outData2,frameIMU2,iiIMU2,szIMU2);
+          iiIMU2++;
+        }
+        while (iiEMG2<szEMG2) { // Read from Myo 2 EMG
+          frameEMG2 = collector.getFrameEMG(2);
+          fillOutputEMG(outData2,frameEMG2,iiEMG2,szEMG2);
+          iiEMG2++;
+        }
+        // END CRITICAL SECTION - release lock
+        if ( !ReleaseMutex(hMutex))
           mexErrMsgTxt("Failed to release lock\n");
         break;
       case WAIT_ABANDONED:
-        DB_MYO_MEX("myo_mex get_streaming_data:\n\tBad lock\n");
         mexErrMsgTxt("Acquired abandoned lock\n");
         break;
     }
-    DB_MYO_MEX("myo_mex get_streaming_data:\n\tAssigning output struct\n");
-    // assign output matrices to struct array
+    
+    // Assign outDataN matrices to MATLAB struct matrix
     plhs[DATA_STRUCT_OUT_NUM] = mxCreateStructMatrix(1,countMyos,NUM_FIELDS,output_fields);
-    DB_MYO_MEX("myo_mex get_streaming_data:\nAssigning outData1\n");
     assnOutputStruct(plhs[DATA_STRUCT_OUT_NUM], outData1, 1);
     if (countMyos>1) {
-      DB_MYO_MEX("myo_mex get_streaming_data:\nAssigning outData2\n");
       assnOutputStruct(plhs[DATA_STRUCT_OUT_NUM], outData2, 2);
     }
     
   } else if ( !strcmp("stop_streaming",cmd) ) {
     // ----------------------------------------- myo_mex stop_streaming ---
-    
     if ( !mexIsLocked() )
       mexErrMsgTxt("myo_mex is not initialized.\n");
     if ( !runThreadFlag )
@@ -309,13 +297,15 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     if ( nlhs>0 )
       mexErrMsgTxt("myo_mex too many outputs specified.\n");
     
+    // Terminate thread and reset state
     runThreadFlag = false; // thread sees this flag and exits
     WaitForSingleObject( hThread, INFINITE );
     CloseHandle( hThread );
     hThread = NULL;
+    
+    // Terminate data logging and reset state
     collector.addDataEnabled = false; // stop handling data events
     collector.syncDataSources(); // sync data up again (flushes queue)
-    Sleep(RESTART_DELAY);
     
   } else if ( !strcmp("delete",cmd) ) {
     // ----------------------------------------- myo_mex delete -----------

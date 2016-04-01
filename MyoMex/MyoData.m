@@ -1,41 +1,96 @@
 classdef MyoData < handle
-  % MyoData  This class represents a myo device
+  % MyoData  Data collector for a physical Myo device
+  %   This class exposes Myo data to users by way of so-called <data> and
+  %   <data>_log properties (See the example below). It is assumed that
+  %   MyoData is owned by a data provider such as a MyoMex object. Users
+  %   simply acquire the handle to a MyoData object from the provider, and
+  %   then use the data. Under the hood, the MyoMex object is repeatedly
+  %   calling into MyoData to give it more data as it becomes available.
   %
+  % Example:
+  %
+  %   mm = MyoMex(); % instantiate MyoMex with one Myo
+  %   m = mm.myoData; % acquire the MyoData handle
+  %
+  %   % Now the MyoData object is automatically accumulating data logs from
+  %   % Myo as they are being provided by MyoMex.
+  %
+  %   % Inspect the <data> properties' most recent samples
+  %   m.timeIMU % timeIMU corresponds to IMU data ONLY
+  %   m.quat
+  %   m.rot         % rotation matrix   - computed from quat
+  %   m.gyro        % sensor frame gyro
+  %   m.gyro_fixed  % fixed frame gyro  - computed from gyro and quat
+  %   m.accel       % sensor frame accel
+  %   m.accel_fixed % fixed frame accel - computed from accel and quat
   
-  properties
-    isStreaming = true;
-  end
-  
+  %
+  %   m.timeEMG % corresponds to all other data listed below
+  %   m.emg
+  %   m.pose        % enumerated data - logical values below
+  %   m.pose_rest
+  %   m.pose_fist
+  %   m.pose_wave_in
+  %   m.pose_wave_out
+  %   m.pose_fingers_spread
+  %   m.arm         % enumerated data - logical cases below
+  %   m.arm_right
+  %   m.arm_left
+  %   m.arm_unknown
+  %   m.xDir        % enumerated data - logical values below
+  %   m.xDir_wrist
+  %   m.xDir_elbow
+  %   m.xDir_unknown
+  %
+  %   % Inspect the <data>_log properties
+  %   % Just append "_log" to all of the <data> property names above. Take
+  %   % care to use the correct time vectors. Here, I'll generate a plot.
+  %
+  %   figure;
+  %   subplot(3,1,1); plot(m.timeIMU_log,m.gyro_log);  title('gyro');
+  %   subplot(3,1,2); plot(m.timeIMU_log,m.accel_log); title('accel');
+  %   subplot(3,1,2); plot(m.timeEMG_log,m.emg_log);   title('emg');
+  %
+  %   % Don't forget to close your session with Myo!
+  %   mm.delete();
+  %
+  %   % Now the MyoData objects aren't receiving new data, but you can
+  %   % still use them to analyze, save, etc. the data you collected.  
+    
   properties (SetAccess = private)
     
-    timeIMU = [];
-    quat = [];
-    gyro = [];
-    gyro_fixed = [];
-    accel = [];
-    accel_fixed = [];
+    timeIMU
+    quat
+    gyro
+    gyro_fixed
+    accel
+    accel_fixed
     
-    timeEMG = [];
-    emg = [];
-    pose = [];
-    arm = [];
-    xDir = [];
+    timeEMG
+    emg
+    pose
     
-    pose_rest;
-    pose_fist;
-    pose_wave_in;
-    pose_wave_out;
-    pose_fingers_spread;
-    pose_double_tap;
-    pose_unknown;
+    arm
+    xDir
     
-    arm_left;
-    arm_right;
-    arm_unknown;
+    pose_rest
+    pose_fist
+    pose_wave_in
+    pose_wave_out
+    pose_fingers_spread
+    pose_double_tap
+    pose_unknown
     
-    xDir_wrist;
-    xDir_elbow;
-    xDir_unknown;
+    arm_left
+    arm_right
+    arm_unknown
+    
+    xDir_wrist
+    xDir_elbow
+    xDir_unknown
+    
+    isStreaming = true;
+    
   end
   
   properties (SetAccess=private,Hidden=true)
@@ -71,7 +126,7 @@ classdef MyoData < handle
     pose_wave_out_log;
     pose_fingers_spread_log;
     pose_double_tap_log;
-    pose_unknown_log;   
+    pose_unknown_log;
     arm_left_log;
     arm_right_log;
     arm_unknown_log;
@@ -115,7 +170,7 @@ classdef MyoData < handle
       
       assert(isnumeric(countMyos) && isscalar(countMyos) && ~mod(countMyos,1),...
         'Input countMyos must be numeric scalar in {0,1,2,...}.');
-            
+      
       if countMyos > 0
         this(countMyos) = MyoData();
       end
@@ -220,7 +275,7 @@ classdef MyoData < handle
       val = this.xDir_log == this.XDIR_UNKNOWN;
     end
     
-    %% --- 
+    %% ---
     function clearLogs(this)
       % clearLogs  Clears logged data
       %   Sets all <data>_log properties to the empty matrix. Do not call
@@ -241,7 +296,7 @@ classdef MyoData < handle
     end
     
     function startStreaming(this), this.isStreaming = true; end
-
+    
     function stopStreaming(this), this.isStreaming = false; end
     
   end
@@ -252,14 +307,13 @@ classdef MyoData < handle
       % addData  Adds new data
       assert(length(this)==length(data),...
         'Input data must be the same length as MyoData');
-      data(1)
-      data(2)
+      
       for ii=1:length(this)
         this(ii).addDataIMU(data(ii),currTime);
         this(ii).addDataEMG(data(ii),currTime);
       end
     end
-        
+    
   end
   
   methods (Access=private)
@@ -269,14 +323,6 @@ classdef MyoData < handle
       
       N = size(data.quat,1);
       t = (1:1:N)' * this.IMU_SAMPLE_TIME;
-
-      if ~isempty(this.prevTimeIMU)
-        t = t + this.prevTimeIMU;
-        this.prevTimeIMU = t(end);
-      else % init time
-        t = t - t(end) + currTime;
-        this.prevTimeIMU = t(end);
-      end        
       
       q = data.quat;
       g = data.gyro;
@@ -284,6 +330,20 @@ classdef MyoData < handle
       q = this.qRenorm(q); %renormalize quaterions
       gf = this.qRot(q,g);
       af = this.qRot(q,a);
+      
+      if ~isempty(this.prevTimeIMU)
+        t = t + this.prevTimeIMU;
+      else % init time
+        t = t - t(end) + currTime;
+        t = t(2:end,:);
+        q = q(2:end,:);
+        g = g(2:end,:);
+        gf = gf(2:end,:);
+        a = a(2:end,:);
+        af = af(2:end,:);
+      end
+      
+      this.prevTimeIMU = t(end);
       
       this.timeIMU = t(end,:);
       this.quat = q(end,:);
@@ -301,19 +361,27 @@ classdef MyoData < handle
       
       N = size(data.emg,1);
       t = (1:1:N)' * this.EMG_SAMPLE_TIME;
-
-      if ~isempty(this.prevTimeEMG)
-        t = t + this.prevTimeIMU;
-      else % init time
-        t = t - t(end) + currTime;
-      end
-      this.prevTimeEMG = t(end);
       
       e = data.emg./this.EMG_SCALE;
       p = data.pose;
       a = data.arm;
       x = data.xDir;
+      
+      if ~isempty(this.prevTimeEMG)
+        t = t + this.prevTimeIMU;
+      else % init time
+        t = t - t(end) + currTime;
+        % chop off first data point
+        t = t(2:end,:);
+        e = e(2:end,:);
+        p = p(2:end,:);
+        a = a(2:end,:);
+        x = x(2:end,:);
+      end
+      this.prevTimeEMG = t(end);
+      
 
+      
       this.timeEMG = t(end,:);
       this.emg = e(end,:);
       this.pose = p(end,:);
@@ -334,7 +402,6 @@ classdef MyoData < handle
     end
     
     function pushLogsEMG(this,t,e,p,a,x)
-            fprintf('adddataemg\n');
       this.timeEMG_log   = [ this.timeEMG_log ; t ];
       this.emg_log       = [ this.emg_log     ; e ];
       this.pose_log      = [ this.pose_log    ; p ];

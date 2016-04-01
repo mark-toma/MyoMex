@@ -13,32 +13,39 @@ information in the help for MyoMex.
 ###########################################################################
 # CHANGELOG - Release Notes
 
-2016-03-xx 1.2
-  In progress ...
- 
-  * ISSUE in myo_mex.mex*
-    Currently in active development and UNSTABLE!!!
-    Initializes fine and indicates finding two Myo devices upon first call
-    into myo_mex('init'), but MATLAB crashes with a segv immediately upon 
-    the first call into myo_mex('get_polling_data'). There's some bug that
-    I'm too tired to find right now. Note that before updating myo_mex.cpp
-    with support for the second Myo device, all of the functionality of
-    MyoMex tested fine.
-  * CHANGE in myo_mex.cpp
-    Encapsulated same data matrix outputs into single MATLAB struct (i.e. 
-    per Myo device) in preparation for multi-Myo support.
-  * CHANGE in myo_mex.cpp
-    Added FrameLog deque to store data for a second myo device. Updated
-    existing functionality to support two (of multiple) Myo devices.
-  * CHANGE in myo_class.hpp
-    Added support for multiple Myo devices by vecotrizing all member
-    variables. Added member functions to query Myo count, lookup Myo id,
-    and parameterized getFrame on the Myo id.
-  * CHANGE in MyoMex.m
-    Updated methods getData(), myo_mex_get_polling_data(), and 
-    myo_mex_get_streaming_data() to accept a single structure output from
-    myo_mex('get_*_data'). A few extra lines glue the fields of the first
-    element of this struct to the variables used previously.
+2016-04-01 2.0
+  Major update - Added support for multiple Myos and 200Hz EMG data. Every 
+  file underwent substantial changes, and most of the previous API should 
+  still function the same way. But there are some breaking changes. See API
+  CHANGES below
+  * NEW FEATURE in 
+  * UPDATED DOCS in MyoMex_Quickstart.m, README.txt
+  * API CHANGES in MyoMex.m, MyoData.m
+    All of the data properties that used to be in MyoMex are now in
+    MyoData. The MyoMex instance simply manages the myo_mex interface and
+    passes new data for each Myo device into an instance of MyoData in its
+    myoData property. That is, mm = MyoMex(countMyos) results in,
+    m = mm.myoData where m is a 1 -by- countMyos object of type MyoData.
+    Then, m1 = mm.myoData(1) can be used to access data from Myo almost
+    identically to the interface provided by MyoMex previously.
+  * NEW CLASS MyoData.m
+    Provides access to data collected from a physical Myo device.
+  * DEPRECATED FEATURE in MyoMex.m, MyoData.m
+    Polling for data is no longer supported, i.e. MyoMex.getData().
+  * NEW FEATURE
+    Multiple Myos supported. MyoMex is now instantiated with an optional
+    parameter, countMyos. This numeric scalar specifies the number of Myos
+    to use. Currently, only one or two Myos are supported. The number of
+    Myos in Myo Connect be exactly countMyos for MyoMex construction to be 
+    successful.
+  * NEW FEATURE
+    All data is now collected at the maximum sample rate. That is 50Hz for
+    IMU data, 200Hz for EMG data, and additional meta data is reported at
+    200Hz at the time instants of EMG samples.
+  * NEW FEATURE in build_myo_mex.m
+    If input sdk_path is the string 'default' then it is assumed to be
+    C:\myo-sdk-win-0.9.0\. This is useful for those who have extracted the 
+    Myo SDK to C:\.
 
 2016-03-12 1.1
   Some new features in MyoMex (no changes to myo_mex) and a slew of 

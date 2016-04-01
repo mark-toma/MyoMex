@@ -1,10 +1,12 @@
 %% MyoMex Quickstart
-% Before you begin, please read through READ_ME.txt and follow all steps
+% Before you begin, please read through README.txt and follow all steps
 % for setting up the Myo Connect application, Myo SDK, and building the
-% MEX function myo_mex.
+% MEX function |myo_mex|.
+%
+% Mark Tomaszewski, mark@mark-toma.com, marktoma@buffalo.edu
 
 %% Before Using |MyoMex|
-% If you decided not to read through |READ_ME.txt|, let's at least show you
+% If you decided not to read through |README.txt|, let's at least show you
 % the quickest possible way to get started.
 
 install_myo_mex; % adds directories to MATLAB search path
@@ -13,155 +15,138 @@ install_myo_mex; % adds directories to MATLAB search path
 sdk_path = 'C:\myo-sdk-win-0.9.0'; % root path to Myo SDK
 build_myo_mex(sdk_path); % builds myo_mex
 
-%% Simplest Usage
-% This m-code class MyoMex is the intended interface for the myo_mex file
-% that was just built. The simplest lifecycle for a MyoMex object is,
+%% MyoMex Usage
+% Before using |MyoMex|, you must decide how many Myos wou'd like to use in
+% this session. The MyoMex constructor argument |countMyos| specifies this
+% value. Make sure that exactly |countMyos| devices are connected in the
+% Myo Connect application or else MyoMex construction will fail. The Myo
+% device(s) should also be worn on a human arm to avoid unexpected
+% disconnection of the device from Myo Connect. If Myo Connect loses a
+% device at any time, MyoMex will terminate and invalidate itself.
 
-m = MyoMex() % instantiate MyoMex (calls into myo_mex init)
-m.delete()   % destroy MyoMex (calls into myo_mex delete)
-clear m
+countMyos = 1;
 
-%% Polling Data
-% The next thing we can do is poll for a single sampling of Myo data.
-% First, instantiate |MyoMex| again.
+%% Instantiate MyoMex
+% After constructing a new |MyoMex| instance, we'll inspect its properties.
 
-m = MyoMex();
-
-%%
-% Call the method |getData()| get current data from Myo and populate
-% |MyoMex| data properties.
-
-m.getData();
+mm = MyoMex(countMyos)
 
 %%
+% Notice that the only property of |mm| is a |1xcountMyos| MyoData object.
+% There is no device data stored by |mm|. The data from each physical Myo
+% device is passed through |mm| to each element of |mm.myoData|.
+
+%% Inspect |MyoData|
+% Since |MyoData| objects inherit from |handle|, we can get handles to the
+% |MyoData| objects representing each physical device and use them
+% directly.
+
+m1 = mm.myoData(1);
+if countMyos == 2, m2 = mm.myoData(2); end
+
+%%
+% Now, we'll just continue this exercise with |m1|, but the exact same
+% demonstration applies for |m2| as well (if |countMyos == 2|.
+%
 % The most recent data from Myo will be stored in the relevant properties
-% of the |MyoMex| object (i.e. |quat|, |gyro|, |accel|, |emg|, |pose|,
-% etc.).
+% of the |MyoData| object (i.e. |quat|, |gyro|, |accel|, |emg|, |pose|,
+% etc.). The following is a list of all properties in |MyoData|.
 
-m.time
-m.quat
-m.gyro
-m.accel
-m.emg
-m.pose
-m.pose_rest
-m.pose_fist
-m.pose_wave_in
-m.pose_wave_out
-m.pose_fingers_spread
-m.pose_double_tap
+pause(0.1); % wait briefly for the first data frame to come in
 
-%%
-% After many subsequent calls to |getData()|, you'll notice that the
-% |data_log| properties of are keeping track of the data received from
-% Myo.
+% data properties sampled on the IMU time base
+m1.timeIMU
+m1.quat
+m1.rot
+m1.gyro
+m1.gyro_fixed
+m1.accel
+m1.accel_fixed
 
-for ii = 1:10, m.getData(); end % poll for data ten times
+% data properties sampled on the EMG time base
+m1.timeEMG
+m1.emg
+m1.pose
+m1.pose_rest
+m1.pose_fist
+m1.pose_wave_in
+m1.pose_wave_out
+m1.pose_fingers_spread
+m1.pose_double_tap
+m1.arm
+m1.arm_right
+m1.arm_left
+m1.arm_unknown
+m1.xDir
+m1.xDir_wrist
+m1.xDir_elbow
+m1.xDir_unknown
 
-m.time_log
-m.accel_log
+%% Using Logged Data
+% As |MyoData| receives data from |MyoMex|, it's automatically accumulated
+% in so-called |<data>_log| properties, i.e. |quat_log|, |accel_log|, etc.
+% We refer to this as the streaming mode of a |MyoData| object. This status
+% is indicated by the |isStreaming| property.
 
-%%
-% As the logs become large in size you may want to clear them using the
-% |clearLogs()| method.
-
-m.clearLogs(); % sets *_log properties back to empty
-
-m.time_log
-m.accel_log
-
-%%
-% And the most recent data received is always maintained in the |data|
-% properties (it's not cleared with the logs).
-
-m.time
-m.accel
-
-%% Streaming Data
-% In addition to manually polling data, the |myo_mex| interface also
-% supports a state in which it continuously polls Myo for data at an
-% (assumed) constant rate in its own thread. This is referred to as the
-% streaming mode. You set and get the effective sampling rate of this
-% feature by accessing the |streaming_data_time| property. This is the
-% number of seconds between data samples.
-
-sample_rate = 30; % desired data sampling rate in Hz
-m.streaming_data_time = 1/sample_rate;
-m.streaming_data_time % print the value
+m1.isStreaming
 
 %%
-% Notice that the time is restricted to millisecond precision as indicated
-% by the warning message.
-%
-% As the MEX file polls Myo for data every |streaming_data_time| seconds,
-% the |MyoMex| object will set up a timer that calls into |myo_mex| to
-% fetch the data every |streaming_frame_time| seconds,
+% We can inspect the accumulation of the logs for example,
 
-m.streaming_frame_time = 1/10; % fetch data frames at 10 Hz
-
-%%
-% Begin and end a streaming data session by calling the methods
-% |startStreaming()| and |stopStreaming()|. Since the |MyoMex| object takes
-% care of fetching the data using a |timer| object, you're free to access
-% the command line for other program behavior.
-
-m.startStreaming();
-% other program behavior
-tic;
-while toc<5
-  fprintf('Number of samples: %5d\n',length(m.time_log));
-  pause(1);
+fprintf('%10s%10s\n','time','samples')
+for ii = 1:5
+  fprintf('% 8.2f%10d\n',...
+    m1.timeIMU,size(m1.quat_log,1));
+  pause(0.2);
 end
-m.stopStreaming();
+fprintf('\n\n');
 
 %%
-% You'll notice that as time goes on, the size of the |data_log|
-% properties grows as data is fetched by |MyoMex|. You can read data from
-% these properties while streaming, but most other methods are not
-% functional in this state.
-%
-% Since we've accumulated some logged data, let's look at a plot of the
-% accelerometer data.
+% Although we can't stop the data from being passed to in |MyoData|, we can
+% toggle streaming mode by using the methods |stopStreaming()| and
+% |startStreaming()|.
+
+m1.stopStreaming();
+fprintf('Number of samples:               \t%d\n',length(m1.timeIMU_log));
+pause(1);
+fprintf('Number of samples after pause(1):\t%d\n',length(m1.timeIMU_log));
+
+%%
+% Now we can plot some data taking care to use the correct time vectors.
 
 figure;
-plot(m.time_log,m.accel_log);
-ylabel('Accelerometer in sensor frame [g]'); xlabel('Time [s]');
+subplot(3,1,1); plot(m1.timeIMU_log,m1.gyro_log);  title('gyro');
+subplot(3,1,2); plot(m1.timeIMU_log,m1.accel_log); title('accel');
+subplot(3,1,3); plot(m1.timeEMG_log,m1.emg_log);   title('emg');
 
 %%
-% We can also transform the |gyro| and |accel| data from sensor frame to
-% fixed frame by getting the dependent property |rot_log|. This is a 3D
-% array in which each 3x3 2D slice is the rotation matrix corresponding to
-% the rows of |quat_log|.
+% If you'd like to clear the |<data>_log| properties to start a new logging
+% trial, then you may use the |clearLogs()| method,
 
-R = m.rot_log;
-accel_fixed = zeros(size(m.accel_log));
-for kk = 1:size(R,3)
-  accel_fixed(kk,:) = (R(:,:,kk)*m.accel_log(kk,:)')';
-end
-
-figure;
-plot(m.time_log,accel_fixed);
-ylabel('Accelerometer in fixed frame [g]'); xlabel('Time [s]');
-
+% collect about T seconds of data
+T = 5; % seconds
+m1.clearLogs()
+m1.startStreaming();
+pause(T);
+m1.stopStreaming();
+fprintf('Logged data for %d seconds,\n\t',T);
+fprintf('IMU samples: %10d\tApprox. IMU sample rate: %5.2f\n\t',...
+  length(m1.timeIMU_log),length(m1.timeIMU_log)/T);
+fprintf('EMG samples: %10d\tApprox. EMG sample rate: %5.2f\n\t',...
+  length(m1.timeEMG_log),length(m1.timeEMG_log)/T);
 
 %%
 % Finally, when you're done with |MyoMex|, don't forget to clean up!
 
-m.delete;
-clear m
-  
+mm.delete;
+clear mm
+
 %%
 % Finally, take advantages of the following resources for additional
-% information about |MyoMex|!
+% information about |MyoData|!
 
 % MyoMexGUI_Monitor
-% properties MyoMex
-% methods MyoMex
-% help MyoMex
-% help MyoMex.time
-% help MyoMex.quat
-% help MyoMex.getData
-% help MyoMex.startStreaming
+% properties MyoData
+% methods MyoData
+% help MyoData
 
-
-  
