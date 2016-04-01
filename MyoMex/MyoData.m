@@ -56,8 +56,20 @@ classdef MyoData < handle
   %   % Now the MyoData objects aren't receiving new data, but you can
   %   % still use them to analyze, save, etc. the data you collected.  
     
+  properties
+  % newDataFcn  Callback to execute when new data is received
+  %   This is either the empty matrix when not set, or a function handle
+  %   conforming to the signature newDataFcn(source,eventdata,...) when
+  %   set. If newDataFcn is set, it is called when a new frame of data is
+  %   received from MyoMex.
+  %
+  %   Input parameter source is the handle to this MyoData object, and
+  %   eventdata is currently passed the empty matrix (reserved for future
+  %   use).
+  newDataFcn
+  end
+  
   properties (SetAccess = private)
-    
     % timeIMU  Time of sampling for IMU data
     %   This is the time at which the inertial measurement unit (IMU) data
     %   is sampled (at 50Hz). The Myo's IMU data includes quat, gyro, and
@@ -112,7 +124,6 @@ classdef MyoData < handle
     % See also:
     %   quat, rot, accel
     accel_fixed
-    
     % timeEMG  Time of sampling for sEMG data
     %   This is the time at which the sEMG data is sampled (at 200Hz).
     %   Other data such as pose, arm, and xDir are also sampled on this
@@ -267,6 +278,13 @@ classdef MyoData < handle
       
     end
     
+    %% --- Setters
+    function set.newDataFcn(this,val)
+      assert(isempty(val)||(isa(val,'function_handle')&&(2==nargin(val))),...
+        'Property newDataFcn must be the empty matrix when not set, or a function handles conforming to the signature newDataFcn(source,eventdata,...) when set.');
+      this.newDataFcn = val;      
+    end
+    
     %% --- Dependent Getters
     function val = get.rot(this)
       if isempty(this.quat)
@@ -398,11 +416,14 @@ classdef MyoData < handle
         this(ii).addDataIMU(data(ii),currTime);
         this(ii).addDataEMG(data(ii),currTime);
       end
+      
+      this.onNewData();
+      
     end
     
   end
   
-  methods (Access=private)
+  methods (Access=private)  
     %% --- Internal Data Management
     function addDataIMU(this,data,currTime)
       if isempty(data.quat), return; end
@@ -466,8 +487,6 @@ classdef MyoData < handle
       end
       this.prevTimeEMG = t(end);
       
-
-      
       this.timeEMG = t(end,:);
       this.emg = e(end,:);
       this.pose = p(end,:);
@@ -495,6 +514,11 @@ classdef MyoData < handle
       this.xDir_log      = [ this.xDir_log    ; x ];
     end
     
+    function onNewData(this)
+      if ~isempty(this.newDataFcn)
+        this.newDataFcn(this,[]);
+      end
+    end
   end
   
   methods (Static=true)
