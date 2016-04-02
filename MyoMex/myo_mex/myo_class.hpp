@@ -74,6 +74,12 @@ class MyoData
   unsigned int countEMG;
   uint64_t timestampEMG;
   
+  // syncIMU
+  // Called before pushing quat, gyro, or accel
+  // This updates the timestampIMU member to keep track of the IMU datas.
+  // If it is detected that a sample of quat, gyro, or accel was skipped,
+  // the previous value for that data source is copied to fill the gap.
+  // This is zero-order-hold interpolation of missing timeseries data.
   void syncIMU(uint64_t ts)
   {
     if ( ts > timestampIMU ) {
@@ -95,6 +101,27 @@ class MyoData
     }
   }
   
+  // syncEMG
+  // Called before pushing emg data
+  // This updates the timestampEMG member to keep track of the EMG datas.
+  // If it is detected that a sample of emg was skipped, the previous value
+  // for that data source is copied to fill the gap. This operation sounds
+  // trivial, but it isn't quite as simple as you'd expect. Myo SDK 
+  // provides emg data samples in pairs for each unique timestamp. That is,
+  // timeN emgN
+  // time0 emg1
+  // time0 emg2
+  // time1 emg3
+  // time1 emg4
+  // timeK emg(2*K+1)
+  // timeK emg(2*K+2)
+  // So then, we keep track of the number of new emg samples received 
+  // without a new timestamp in semEMG. Then pad emg with the last value if
+  // it's detected that a sample was missed.
+  // Furthermore, since event-based meta data is sampled on the EMG vector
+  // as well, we fill their queues up to the future size of emg to maintain
+  // consistency there.
+  This is zero-order-hold interpolation of missing timeseries data.
   void syncEMG(uint64_t ts)
   {
     if ( ts>timestampEMG ) { // new timestamp
@@ -118,6 +145,13 @@ class MyoData
     
   }
   
+  // sync<Pose/Arm/XDir>
+  // This event-based meta data is sampled on the EMG vector, so we fill 
+  // their queues up to the future size of emg to maintain consistency. 
+  // Things would theoretically break down if these events fired more 
+  // frequently than the emg data, but I think that's impossible. It's
+  // highly unlikely for sure! But still, the boolean return values allow
+  // for guarding against this case.
   bool syncPose(uint64_t ts)
   {
     if (pose.size() == emg.size())
@@ -144,9 +178,6 @@ class MyoData
   }
   
 public:
-  
-  // Construct a MyoData
-  // The constructor must be passed a single myo::Myo* input argument.
   MyoData(myo::Myo* myo, uint64_t timestamp)
   : countIMU(1), countEMG(1), semEMG(0)
   {
@@ -161,20 +192,13 @@ public:
     myo::Vector3<float> _gyro;
     myo::Vector3<float> _accel;
     std::array<int8_t,8> _emg;
-    //myo::Pose _pose = myo::Pose::unknown;
-    //myo::Arm _arm = myo::Arm::armUnknown;
-    //myo::XDirection _xDir = myo::XDirection::xDirectionUnknown;
     quat.push(_quat);        // push them back onto queues
     gyro.push(_gyro);
     accel.push(_accel);
     emg.push(_emg);
-    //pose.push(_pose);
-    //arm.push(_arm);
-    //xDir.push(_xDir);
     pose.push(myo::Pose::unknown);
     arm.push(myo::armUnknown);
     xDir.push(myo::xDirectionUnknown);
-    
     timestampIMU = timestamp;
     timestampEMG = timestamp;
   }
@@ -182,6 +206,8 @@ public:
   // Myo is owned by hub... no cleanup necessary here
   ~MyoData() {}
   
+  // getFrameXXX
+  // Read a sample of data from the IMU or EMG queues
   FrameIMU &getFrameIMU()
   {
     countIMU = countIMU - 1;
@@ -193,7 +219,6 @@ public:
     accel.pop();
     return frameIMU;
   }
-  
   FrameEMG &getFrameEMG()
   {
     countEMG = countEMG - 1;
@@ -208,13 +233,22 @@ public:
     return frameEMG;
   }
   
+  // getInstance
+  // Get the pointer to this myo::Myo* object. Use this function to test
+  // equivalence of this MyoData's myo pointer to another.
   myo::Myo* getInstance() { return pMyo; }
   
+  // getCountXXX
+  // Get the number of valid samples in the IMU or EMG queues
   unsigned int getCountIMU() { return countIMU; }
-  
   unsigned int getCountEMG() { return countEMG; }
   
-  // pop_front on all queues until size==1
+  // syncDataSources
+  // Pops data off of queues until there are at most two bad samples. 
+  // Subsequently, a third bad sample may fill the read head of the queue.
+  // Use this functions to put the data vector into a known state. Throw
+  // away the first three samples of data read after this call. The rest 
+  // should be contiguous on the maximum sample rate for the data source.
   void syncDataSources()
   {
     FrameIMU frameIMU;
@@ -225,24 +259,27 @@ public:
       frameEMG = getFrameEMG();
   }
   
+  // add<data> functions
+  // All of these perform two operations:
+  // * sync<type>
+  //   Syncs up the data queues that are being samples on the same time 
+  //   base.
+  // * <data>.push(_<data>) pushes new data onto its queue
   void addQuat(const myo::Quaternion<float>& _quat, uint64_t timestamp)
   {
     syncIMU(timestamp);
     quat.push(_quat);
   }
-  
   void addGyro(const myo::Vector3<float>& _gyro, uint64_t timestamp)
   {
     syncIMU(timestamp);
     gyro.push(_gyro);
   }
-  
   void addAccel(const myo::Vector3<float>& _accel, uint64_t timestamp)
   {
     syncIMU(timestamp);
     accel.push(_accel);
   }
-  
   void addEmg(const int8_t  *_emg, uint64_t timestamp)
   {
     syncEMG(timestamp);
@@ -251,13 +288,11 @@ public:
     for (ii;ii<8;ii++) {tmp[ii]=_emg[ii];}
     emg.push(tmp);
   }
-  
   void addPose(myo::Pose _pose, uint64_t timestamp)
   {
     if ( syncPose(timestamp) )
       pose.push(_pose);
   }
-  
   void addArm(myo::Arm _arm, uint64_t timestamp)
   {
     if ( syncArm(timestamp) )
@@ -274,23 +309,24 @@ public:
 
 
 // --- DataCollector
-// implementation of object used to grab data from myo sdk api
-// this class is registered with the hub and its member functions are
-// called during hub.runX(...) with relevant myo data
+// This class provides the link to Myo SDK, encapsulation of the MyoData
+// class that manages data queues for each Myo device, and provides access
+// to that data.
+// * Register this class with a myo::Hub to trigger calls back into the 
+//   on<event> functions below.
+// * Call myo::Hub::run to allow callbacks to write data into the 
+//   encapsulated MyoData objects in knownMyos
+// * Call getFrameXXX(id) at most getCountXXX(id) times to read samples of 
+//   FrameXXX data, where id is the 1-indexed id for a Myo device with 
+//   maximum value getCountMyos()
 class DataCollector : public myo::DeviceListener
 {
-  
   std::vector<MyoData*> knownMyos;
-  
-public:
-  
-  bool addDataEnabled;
-  
+public: 
+  bool addDataEnabled; // unset to disable callbacks (they'll fall-through)
   DataCollector()
   : addDataEnabled(false)
-  {
-  }
-  
+  {}
   ~DataCollector()
   {
     // destruct all MyoData* in knownMyos
@@ -301,23 +337,28 @@ public:
     }
   }
   
+  // --- Wrappers for MyoData members
+  // These functions basically vectorize similarly named members of MyoData
+  // on the elements of knownMyos
   unsigned int getCountIMU(int id) { return knownMyos[id-1]->getCountIMU(); }
-  
   unsigned int getCountEMG(int id) { return knownMyos[id-1]->getCountEMG(); }
-  
   const FrameIMU &getFrameIMU( int id ) { return knownMyos[id-1]->getFrameIMU(); }
-  
   const FrameEMG &getFrameEMG( int id ) { return knownMyos[id-1]->getFrameEMG(); }
-  
   void syncDataSources()
   {
     int ii = 0;
     for (ii;ii<knownMyos.size();ii++)
       knownMyos[ii]->syncDataSources();
   }
-  // get current number of myos
+  
+  // getCountMyos
+  // Get current number of myos
   const unsigned int getCountMyos() { return knownMyos.size(); }
   
+  // getMyoID
+  // Returns the (1-indexed) ID of input myo in knownMyos. If myo isn't in
+  // knownMyos yet, it's added. This function can be used to index into
+  // knownMyos with a myo pointer by: knownMyos[getMyoID(myo)-1].
   const unsigned int getMyoID(myo::Myo* myo,uint64_t timestamp)
   {
     // search myos in knownMyos for myo
@@ -329,65 +370,61 @@ public:
     return knownMyos.size();
   }
   
+  // on<event> Callbacks
+  // * Refer to the Myo SDK documentation for information on the mechanisms
+  //   that trigger these callback functions in myo::Hub.
+  // * All of these invoke getMyoID() so as to automatically add myo to
+  //   knownMyos without explicitly expressing this logic.
+  // * The on<data>Data functions fall-through when !addDataEnabled
+  // * Some device state meta data is maintained in the state change events
   void onPair(myo::Myo* myo, uint64_t timestamp, myo::FirmwareVersion firmwareVersion)
   {
     unsigned int tmp = getMyoID(myo,timestamp);
   }
-  
   void onConnect(myo::Myo *myo, uint64_t timestamp, myo::FirmwareVersion firmwareVersion)
   {
     unsigned int tmp =  getMyoID(myo,timestamp);
   }
-  
   void onDisconnect(myo::Myo* myo, uint64_t timestamp)
   {
     knownMyos.erase(knownMyos.begin()+getMyoID(myo,timestamp)-1);
   }
-  
   void onLock(myo::Myo* myo, uint64_t timestamp)
   {
     // shamelessly unlock the device
     myo->unlock(myo::Myo::unlockHold);
   }
-  
   void onOrientationData(myo::Myo* myo, uint64_t timestamp, const myo::Quaternion<float>& q)
   {
     if (!addDataEnabled) { return; }
     knownMyos[getMyoID(myo,timestamp)-1]->addQuat(q,timestamp);
   }
-  
   void onGyroscopeData (myo::Myo* myo, uint64_t timestamp, const myo::Vector3<float>& g)
   {
     if (!addDataEnabled) { return; }
     knownMyos[getMyoID(myo,timestamp)-1]->addGyro(g,timestamp);
   }
-  
   void onAccelerometerData (myo::Myo* myo, uint64_t timestamp, const myo::Vector3<float>& a)
   {
     if (!addDataEnabled) { return; }
     knownMyos[getMyoID(myo,timestamp)-1]->addAccel(a,timestamp);
   }
-  
   void onEmgData(myo::Myo* myo, uint64_t timestamp, const int8_t  *e)
   {
     if (!addDataEnabled) { return; }
     knownMyos[getMyoID(myo,timestamp)-1]->addEmg(e,timestamp);
   }
-  
   void onPose(myo::Myo* myo, uint64_t timestamp, myo::Pose p)
   {
     if (!addDataEnabled) { return; }
     knownMyos[getMyoID(myo,timestamp)-1]->addPose(p,timestamp);
   }
-  
   //void onUnpair(myo::Myo* myo, uint64_t timestamp) {}
-  
   void onArmSync(myo::Myo* myo, uint64_t timestamp, myo::Arm arm, myo::XDirection xDirection) {
     if (!addDataEnabled) { return; }
     knownMyos[getMyoID(myo,timestamp)-1]->addArm(arm,timestamp);
     knownMyos[getMyoID(myo,timestamp)-1]->addXDir(xDirection,timestamp);
   }
-  
   void onArmUnsync(myo::Myo* myo, uint64_t timestamp) {
     if (!addDataEnabled) { return; }
     // infer state changes of arm and xdir
