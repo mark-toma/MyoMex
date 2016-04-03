@@ -23,9 +23,6 @@ classdef MyoData < handle
   %   m.gyro_fixed  % fixed frame gyro  - computed from gyro and quat
   %   m.accel       % sensor frame accel
   %   m.accel_fixed % fixed frame accel - computed from accel and quat
-  %
-  %   m.timeEMG % corresponds to all other data listed below
-  %   m.emg
   %   m.pose        % enumerated data - logical values below
   %   m.pose_rest
   %   m.pose_fist
@@ -40,6 +37,9 @@ classdef MyoData < handle
   %   m.xDir_wrist
   %   m.xDir_elbow
   %   m.xDir_unknown
+  %
+  %   m.timeEMG % corresponds to all other data listed below
+  %   m.emg
   %
   %   % Inspect the <data>_log properties
   %   % Just append "_log" to all of the <data> property names above. Take
@@ -75,14 +75,16 @@ classdef MyoData < handle
     %   is sampled (at 50Hz). The Myo's IMU data includes quat, gyro, and
     %   accel. Other data such as rot, gyro_fixed, and accel_fixed are
     %   computed from the IMU data.
+    %   Other data such as pose, arm, and xDir are also sampled on this
+    %   time base.
     %
     % See also:
-    %   quat, gyro, accel, rot, gyro_fixed, accel_fixed
+    %   quat, gyro, accel, rot, gyro_fixed, accel_fixed, pose, arm, xDir
     timeIMU
     % quat  Quaternion representing orientation of Myo
     %   This is a 1x4 array of unit quaternion elements with the scalar
     %   part listed first. That is, if q = s + vx*i + vy*j + vz*k, then
-    %   quat = [s,vx,vy,vz]. 
+    %   quat = [s,vx,vy,vz].
     %
     %   Furthermore, the interpretation of quat as a
     %   rotation or transformation depends on the definition of quaternion
@@ -124,18 +126,6 @@ classdef MyoData < handle
     % See also:
     %   quat, rot, accel
     accel_fixed
-    % timeEMG  Time of sampling for sEMG data
-    %   This is the time at which the sEMG data is sampled (at 200Hz).
-    %   Other data such as pose, arm, and xDir are also sampled on this
-    %   time base.
-    %
-    % See also:
-    %   emg, pose, arm, xDir
-    timeEMG
-    % emg  Raw data from 8 surface EMG (sEMG) sensors
-    %   This is a 1x8 array of sEMG data in the range [-1,1] sampled at a
-    %   rate of 200Hz.
-    emg
     % pose  Indicates the currently detected gesture (enum)
     %   This is an enumerated value. Access logical indication of a
     %   particular pose with the pose_suffix properties where suffix is the
@@ -174,6 +164,16 @@ classdef MyoData < handle
     xDir_wrist % Indicates xDir from enum value in xDir (logical)
     xDir_elbow % Indicates xDir from enum value in xDir (logical)
     xDir_unknown % Indicates xDir from enum value in xDir (logical)
+    % timeEMG  Time of sampling for sEMG data
+    %   This is the time at which the sEMG data is sampled (at 200Hz).
+    %
+    % See also:
+    %   emg
+    timeEMG
+    % emg  Raw data from 8 surface EMG (sEMG) sensors
+    %   This is a 1x8 array of sEMG data in the range [-1,1] sampled at a
+    %   rate of 200Hz.
+    emg
     % isStreaming  Indicates status of data logging (logical)
     %   This state is toggled by methods startStreaming and
     %   stopStreaming
@@ -190,10 +190,10 @@ classdef MyoData < handle
     gyro_fixed_log
     accel_log       
     accel_fixed_log 
-    timeEMG_log     
-    emg_log         
     pose_log        
     arm_log         
+    timeEMG_log     
+    emg_log
     xDir_log        
     POSE_REST           = 0
     POSE_FIST           = 1
@@ -250,6 +250,8 @@ classdef MyoData < handle
     IMU_SAMPLE_TIME = 0.020 %  50Hz
     EMG_SAMPLE_TIME = 0.005 % 200Hz
     EMG_SCALE       = 128
+    
+    NUM_INIT_SAMPLES = 4
   end
   
   methods
@@ -415,20 +417,23 @@ classdef MyoData < handle
       for ii=1:length(this)
         this(ii).addDataIMU(data(ii),currTime);
         this(ii).addDataEMG(data(ii),currTime);
+        this(ii).onNewData();
       end
-      
-      this.onNewData();
       
     end
     
   end
   
   methods (Access=private)  
+    
     %% --- Internal Data Management
     function addDataIMU(this,data,currTime)
-      if isempty(data.quat), return; end
-      
       N = size(data.quat,1);
+      if N==0, return; end
+      P = this.NUM_INIT_SAMPLES;
+      assert( ~(isempty(this.prevTimeIMU)&&(N<P)),...
+        'Too few samples received in initialization of log.');
+      
       t = (1:1:N)' * this.IMU_SAMPLE_TIME;
       
       q = data.quat;
@@ -437,17 +442,24 @@ classdef MyoData < handle
       q = this.qRenorm(q); %renormalize quaterions
       gf = this.qRot(q,g);
       af = this.qRot(q,a);
+      p = data.pose;
+      m = data.arm;
+      x = data.xDir;
       
       if ~isempty(this.prevTimeIMU)
         t = t + this.prevTimeIMU;
       else % init time
         t = t - t(end) + currTime;
-        t = t(2:end,:);
-        q = q(2:end,:);
-        g = g(2:end,:);
-        gf = gf(2:end,:);
-        a = a(2:end,:);
-        af = af(2:end,:);
+        % chop off first P data points
+        t  =  t(P+1:end,:);
+        q  =  q(P+1:end,:);
+        g  =  g(P+1:end,:);
+        gf = gf(P+1:end,:);
+        a  =  a(P+1:end,:);
+        af = af(P+1:end,:);
+        p  =  p(P+1:end,:);
+        m  =  m(P+1:end,:);
+        x  =  x(P+1:end,:);
       end
       
       this.prevTimeIMU = t(end);
@@ -458,60 +470,57 @@ classdef MyoData < handle
       this.gyro_fixed = gf(end,:);
       this.accel = a(end,:);
       this.accel_fixed = af(end,:);
+      this.pose = p(end,:);
+      this.arm = m(end,:);
+      this.xDir = x(end,:);
       
-      if this.isStreaming, this.pushLogsIMU(t,q,g,gf,a,af); end
+      if this.isStreaming, this.pushLogsIMU(t,q,g,gf,a,af,p,m,x); end
       
     end
     
     function addDataEMG(this,data,currTime)
-      if isempty(data.emg), return; end
-      
       N = size(data.emg,1);
+      if N==0, return; end
+      P = this.NUM_INIT_SAMPLES;
+      assert( ~(isempty(this.prevTimeEMG)&&(N<P)),...
+        'Too few samples received in initialization of log.');
+      
       t = (1:1:N)' * this.EMG_SAMPLE_TIME;
       
       e = data.emg./this.EMG_SCALE;
-      p = data.pose;
-      a = data.arm;
-      x = data.xDir;
       
       if ~isempty(this.prevTimeEMG)
         t = t + this.prevTimeIMU;
       else % init time
         t = t - t(end) + currTime;
-        % chop off first data point
-        t = t(2:end,:);
-        e = e(2:end,:);
-        p = p(2:end,:);
-        a = a(2:end,:);
-        x = x(2:end,:);
+        % chop off first P data points
+        t = t(P+1:end,:);
+        e = e(P+1:end,:);
       end
       this.prevTimeEMG = t(end);
       
       this.timeEMG = t(end,:);
       this.emg = e(end,:);
-      this.pose = p(end,:);
-      this.arm = a(end,:);
-      this.xDir = x(end,:);
       
-      if this.isStreaming, this.pushLogsEMG(t,e,p,a,x); end
+      if this.isStreaming, this.pushLogsEMG(t,e); end
       
     end
     
-    function pushLogsIMU(this,t,q,g,gf,a,af)
+    function pushLogsIMU(this,t,q,g,gf,a,af,p,m,x)
       this.timeIMU_log     = [ this.timeIMU_log     ; t  ];
       this.quat_log        = [ this.quat_log        ; q  ];
       this.gyro_log        = [ this.gyro_log        ; g  ];
       this.gyro_fixed_log  = [ this.gyro_fixed_log  ; gf ];
       this.accel_log       = [ this.accel_log       ; a  ];
       this.accel_fixed_log = [ this.accel_fixed_log ; af ];
+      this.pose_log        = [ this.pose_log        ; p  ];
+      this.arm_log         = [ this.arm_log         ; m  ];
+      this.xDir_log        = [ this.xDir_log        ; x  ];
     end
     
-    function pushLogsEMG(this,t,e,p,a,x)
+    function pushLogsEMG(this,t,e)
       this.timeEMG_log   = [ this.timeEMG_log ; t ];
       this.emg_log       = [ this.emg_log     ; e ];
-      this.pose_log      = [ this.pose_log    ; p ];
-      this.arm_log       = [ this.arm_log     ; a ];
-      this.xDir_log      = [ this.xDir_log    ; x ];
     end
     
     function onNewData(this)

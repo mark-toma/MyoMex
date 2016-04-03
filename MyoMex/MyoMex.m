@@ -34,6 +34,9 @@ classdef MyoMex < handle
   % MyoMex property myoData (a MyoData object) to provide it with the
   % latest batch of samples.
    
+  properties
+    newDataFcn
+  end
   properties (SetAccess = private)
     % myo_data  Data objects for physical Myo devices
     myoData;
@@ -45,6 +48,7 @@ classdef MyoMex < handle
     timerStreamingData
     nowInit
     DEFAULT_STREAMING_FRAME_TIME = 0.040
+    NUM_INIT_SAMPLES = 4
   end
   
   methods
@@ -87,20 +91,12 @@ classdef MyoMex < handle
       end
       
       % call into myo_mex init
-      [fail,emsg,countMyosInit] = this.myo_mex_init();
+      [fail,emsg] = this.myo_mex_init(countMyos);
       if fail
         if strcmp(emsg,'Myo failed to init!') % extra hint
           warning('Myo will fail to init if it is not connected to your system via Myo Connect.');
         end
         error('MEX-file ''myo_mex'' failed to initialize with error:\n\t''%s''',emsg);
-      end
-      
-      % error out if myo_mex failed to initialize with desired countMyos
-      if countMyosInit ~= countMyos
-        this.myo_mex_delete(); % clean up myo_mex internal state
-        this.myo_mex_clear(); % clean up mex file myo_mex
-        error('MyoMex failed to initialize %d Myos. myo_mex initialized to %d Myos instead.',...
-          countMyos,countMyosInit);
       end
       
       this.myoData = MyoData(countMyos);
@@ -120,7 +116,15 @@ classdef MyoMex < handle
         'myo_mex delete failed with message:\n\t''%s''',emsg);
       MyoMex.myo_mex_clear();
     end
+        
+    %% --- Setters
+    function set.newDataFcn(this,val)
+      assert(isempty(val)||(isa(val,'function_handle')&&(2==nargin(val))),...
+        'Property newDataFcn must be the empty matrix when not set, or a function handles conforming to the signature newDataFcn(source,eventdata,...) when set.');
+      this.newDataFcn = val;      
+    end
     
+    %% --- Dependent Getters
     function val = get.currTime(this)
       val = (now - this.nowInit)*24*60*60;
     end
@@ -139,7 +143,7 @@ classdef MyoMex < handle
         'executionmode','fixedrate',...
         'name','MyoMex-timerStreamingData',...
         'period',this.DEFAULT_STREAMING_FRAME_TIME,...
-        'startdelay',this.DEFAULT_STREAMING_FRAME_TIME,...
+        'startdelay',this.DEFAULT_STREAMING_FRAME_TIME*this.NUM_INIT_SAMPLES,...
         'timerfcn',@(src,evt)this.timerStreamingDataCallback(src,evt));
       [fail,emsg] = this.myo_mex_start_streaming();
       if fail
@@ -182,8 +186,13 @@ classdef MyoMex < handle
         'myo_mex get_streaming_data failed with message\n\t''%s''\n%s',emsg,...
         sprintf('MyoMex has been cleaned up and destroyed.'));
       this.myoData.addData(data,this.currTime);
+      this.onNewData();
     end
-    
+    function onNewData(this)
+      if ~isempty(this.newDataFcn)
+        this.newDataFcn(this,[]);
+      end
+    end
   end
   
   %% --- Wrappers for myo_mex Interface
@@ -192,11 +201,12 @@ classdef MyoMex < handle
   % the single quotes
   methods (Static=true,Access=private,Hidden=true)
     
-    function [fail,emsg,data] = myo_mex_init()
+    function [fail,emsg] = myo_mex_init(countMyos)
+      assert( (nargin==1) && isnumeric(countMyos) && isscalar(countMyos) && any(countMyos==[1,2]),...
+        'Input countMyos must be a numeric scalar in [1,2].');
       fail = false; emsg = [];
-      data = [];
       try
-        data = myo_mex('init');
+        myo_mex('init',countMyos);
       catch err
         fail = true; emsg = err.message;
       end

@@ -13,12 +13,39 @@ information in the help for MyoMex.
 ###########################################################################
 # CHANGELOG - Release Notes
 
+2016-xx-xx 2.1 (pre-release)
+  
+move meta to imu time base
+disable emg when countMyos > 1
+  * CHANGE in myo_mex.cpp, myo_class.hpp, MyoData.m
+    Myo state meta data is now sampled on the IMU time base leaving EMG
+    data decoupled from all other streams, and the EMG data is not enabled
+    when countMyos is greater than 1.
+  * CHANGE in MyoMex.m, MyoData.m
+    Both classes had a newDataFcn property that is a callback triggered
+    after new data is assigned to MyoData object(s). A new provate method
+    onNewData triggers the callback after MyoData.addData returns.
+  * CHANGE in myo_mex.cpp, MyoMex.m
+    Method init now takes countMyos as a second input argument instead of
+    returning it as a parameter. Failure to initialize with countMyos Myos
+    now results in an error in myo_mex instead of an error in MyoMex after
+    checking the initialization result in m-code. Changes to MyoMex were
+    performed for compatibility, but the API remains unchanged.
+  * NEW FEATURE in 
+  * BUGFIX in MyoMex.m, MyoData.m
+    Previously, MyoData would log initial samples that weren't contiguous
+    with the following time series. The MEX file myo_mex sends at most
+    three such samples when streaming begins (has to do with
+    synchronization mechanism implementation). Now MyoData chops these off
+    of the initial addDataXXX calls based on property NUM_INIT_SAMPLES and
+    MyoMex incorporates a corresponding start delay to ensure at least that
+    many samples are received on the initial call into myo_mex.
+
 2016-04-01 2.0
   Major update - Added support for multiple Myos and 200Hz EMG data. Every 
   file underwent substantial changes, and most of the previous API should 
   still function the same way. But there are some breaking changes. See API
   CHANGES below
-  * NEW FEATURE in 
   * UPDATED DOCS in MyoMex_Quickstart.m, README.txt
   * API CHANGES in MyoMex.m, MyoData.m
     All of the data properties that used to be in MyoMex are now in

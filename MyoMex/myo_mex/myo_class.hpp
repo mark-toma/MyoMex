@@ -28,15 +28,15 @@ struct FrameIMU
   myo::Quaternion<float> quat;
   myo::Vector3<float>    gyro;
   myo::Vector3<float>    accel;
+  myo::Pose              pose;
+  myo::Arm               arm;
+  myo::XDirection        xDir;
 }; // FrameIMU
 
 // EMG data frame
 struct FrameEMG
 {
   std::array<int8_t,8> emg;
-  myo::Pose            pose;
-  myo::Arm             arm;
-  myo::XDirection      xDir;
 }; // FrameEMG
 
 // END Data Frames
@@ -57,6 +57,7 @@ class MyoData
   
   // Pointer to a Myo device instance provided by hub
   myo::Myo* pMyo;
+  bool addEmgEnabled;
   
   // IMU data queues and state information
   std::queue<myo::Quaternion<float>,std::deque<myo::Quaternion<float>>> quat;
@@ -80,6 +81,9 @@ class MyoData
   // If it is detected that a sample of quat, gyro, or accel was skipped,
   // the previous value for that data source is copied to fill the gap.
   // This is zero-order-hold interpolation of missing timeseries data.
+  // Furthermore, since event-based meta data is sampled on the EMG vector
+  // as well, we fill their queues up to the future size of emg to maintain
+  // consistency there.
   void syncIMU(uint64_t ts)
   {
     if ( ts > timestampIMU ) {
@@ -98,7 +102,46 @@ class MyoData
       }
       countIMU++;
       timestampIMU = ts;
+      // fill pose, arm, and xDir up to the new countEMG
+      myo::Pose p = pose.back();
+      while ( pose.size()<countIMU ) { pose.push(p); }
+      myo::Arm a = arm.back();
+      while ( arm.size()<countIMU ) { arm.push(a); }
+      myo::XDirection x = xDir.back();
+      while ( xDir.size()<countIMU ) { xDir.push(x); }
     }
+  }
+  
+  // sync<Pose/Arm/XDir>
+  // This event-based meta data is sampled on the EMG vector, so we fill 
+  // their queues up to the future size of emg to maintain consistency. 
+  // Things would theoretically break down if these events fired more 
+  // frequently than the emg data, but I think that's impossible. It's
+  // highly unlikely for sure! But still, the boolean return values allow
+  // for guarding against this case.
+  bool syncPose(uint64_t ts)
+  {
+    if (pose.size() == countIMU)
+      return false;
+    myo::Pose p = pose.back();
+    while ( pose.size()<(countIMU-1) ) { pose.push(p); }
+    return true;
+  }
+  bool syncArm(uint64_t ts)
+  {
+    if (arm.size() == countIMU)
+      return false;
+    myo::Arm a = arm.back();
+    while ( arm.size()<(countIMU-1) ) { arm.push(a); }
+    return true;
+  }
+  bool syncXDir(uint64_t ts)
+  {
+    if (xDir.size() == countIMU)
+      return false;
+    myo::XDirection x = xDir.back();
+    while ( xDir.size()<(countIMU-1) ) { xDir.push(x); }
+    return true;
   }
   
   // syncEMG
@@ -118,10 +161,7 @@ class MyoData
   // So then, we keep track of the number of new emg samples received 
   // without a new timestamp in semEMG. Then pad emg with the last value if
   // it's detected that a sample was missed.
-  // Furthermore, since event-based meta data is sampled on the EMG vector
-  // as well, we fill their queues up to the future size of emg to maintain
-  // consistency there.
-  This is zero-order-hold interpolation of missing timeseries data.
+  // This is zero-order-hold interpolation of missing timeseries data.
   void syncEMG(uint64_t ts)
   {
     if ( ts>timestampEMG ) { // new timestamp
@@ -135,72 +175,37 @@ class MyoData
     }
     countEMG++;
     timestampEMG = ts;
-    // fill pose, arm, and xDir up to the new countEMG
-    myo::Pose p = pose.back();
-    while ( pose.size()<countEMG ) { pose.push(p); }
-    myo::Arm a = arm.back();
-    while ( arm.size()<countEMG ) { arm.push(a); }
-    myo::XDirection x = xDir.back();
-    while ( xDir.size()<countEMG ) { xDir.push(x); }
-    
-  }
-  
-  // sync<Pose/Arm/XDir>
-  // This event-based meta data is sampled on the EMG vector, so we fill 
-  // their queues up to the future size of emg to maintain consistency. 
-  // Things would theoretically break down if these events fired more 
-  // frequently than the emg data, but I think that's impossible. It's
-  // highly unlikely for sure! But still, the boolean return values allow
-  // for guarding against this case.
-  bool syncPose(uint64_t ts)
-  {
-    if (pose.size() == emg.size())
-      return false;
-    myo::Pose p = pose.back();
-    while ( pose.size()<(countEMG-1) ) { pose.push(p); }
-    return true;
-  }
-  bool syncArm(uint64_t ts)
-  {
-    if (arm.size() == emg.size())
-      return false;
-    myo::Arm a = arm.back();
-    while ( arm.size()<(countEMG-1) ) { arm.push(a); }
-    return true;
-  }
-  bool syncXDir(uint64_t ts)
-  {
-    if (xDir.size() == emg.size())
-      return false;
-    myo::XDirection x = xDir.back();
-    while ( xDir.size()<(countEMG-1) ) { xDir.push(x); }
-    return true;
   }
   
 public:
-  MyoData(myo::Myo* myo, uint64_t timestamp)
-  : countIMU(1), countEMG(1), semEMG(0)
+  MyoData(myo::Myo* myo, uint64_t timestamp, bool _addEmgEnabled)
+  : countIMU(1), countEMG(1), semEMG(0), timestampIMU(0), timestampEMG(0)
   {
     pMyo = myo; // pointer to myo::Myo
     
     // perform some operations on myo to set it up before subsequent use
-    pMyo->setStreamEmg(myo::Myo::streamEmgEnabled);
     pMyo->unlock(myo::Myo::unlockHold);
+    if (_addEmgEnabled) {
+      pMyo->setStreamEmg(myo::Myo::streamEmgEnabled);
+      countEMG = 1;
+      std::array<int8_t,8> _emg;
+      emg.push(_emg);
+      timestampEMG = timestamp;
+    }
+    
+    addEmgEnabled = _addEmgEnabled;
     
     // fill up the other private members
     myo::Quaternion<float> _quat; // dummy default objects
     myo::Vector3<float> _gyro;
     myo::Vector3<float> _accel;
-    std::array<int8_t,8> _emg;
     quat.push(_quat);        // push them back onto queues
     gyro.push(_gyro);
     accel.push(_accel);
-    emg.push(_emg);
     pose.push(myo::Pose::unknown);
     arm.push(myo::armUnknown);
     xDir.push(myo::xDirectionUnknown);
     timestampIMU = timestamp;
-    timestampEMG = timestamp;
   }
   
   // Myo is owned by hub... no cleanup necessary here
@@ -211,25 +216,25 @@ public:
   FrameIMU &getFrameIMU()
   {
     countIMU = countIMU - 1;
-    frameIMU.quat        = quat.front();
-    frameIMU.gyro        = gyro.front();
-    frameIMU.accel       = accel.front();
+    frameIMU.quat   = quat.front();
+    frameIMU.gyro   = gyro.front();
+    frameIMU.accel  = accel.front();
+    frameIMU.pose   = pose.front();
+    frameIMU.arm    = arm.front();
+    frameIMU.xDir   = xDir.front();
     quat.pop();
     gyro.pop();
     accel.pop();
+    pose.pop();
+    arm.pop();
+    xDir.pop();
     return frameIMU;
   }
   FrameEMG &getFrameEMG()
   {
     countEMG = countEMG - 1;
     frameEMG.emg  = emg.front();
-    frameEMG.pose = pose.front();
-    frameEMG.arm  = arm.front();
-    frameEMG.xDir = xDir.front();
     emg.pop();
-    pose.pop();
-    arm.pop();
-    xDir.pop();
     return frameEMG;
   }
   
@@ -282,6 +287,7 @@ public:
   }
   void addEmg(const int8_t  *_emg, uint64_t timestamp)
   {
+    if (!addEmgEnabled ) { return; }
     syncEMG(timestamp);
     std::array<int8_t,8> tmp;
     int ii = 0;
@@ -324,8 +330,9 @@ class DataCollector : public myo::DeviceListener
   std::vector<MyoData*> knownMyos;
 public: 
   bool addDataEnabled; // unset to disable callbacks (they'll fall-through)
+  bool addEmgEnabled;
   DataCollector()
-  : addDataEnabled(false)
+  : addDataEnabled(false), addEmgEnabled(false)
   {}
   ~DataCollector()
   {
@@ -366,7 +373,7 @@ public:
       if (knownMyos[ii]->getInstance() == myo) { return ii+1; }
     
     // add myo to a new MyoData* in knowmMyos if it doesn't exist yet
-    knownMyos.push_back(new MyoData(myo,timestamp));
+    knownMyos.push_back(new MyoData(myo,timestamp,addEmgEnabled));
     return knownMyos.size();
   }
   
@@ -411,7 +418,7 @@ public:
   }
   void onEmgData(myo::Myo* myo, uint64_t timestamp, const int8_t  *e)
   {
-    if (!addDataEnabled) { return; }
+    if (!addDataEnabled||!addEmgEnabled) { return; }
     knownMyos[getMyoID(myo,timestamp)-1]->addEmg(e,timestamp);
   }
   void onPose(myo::Myo* myo, uint64_t timestamp, myo::Pose p)
