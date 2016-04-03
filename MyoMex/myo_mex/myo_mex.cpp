@@ -141,13 +141,13 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     if ( nrhs<2 )
       mexErrMsgTxt("myo_mex init requires 2 inputs.\n");
     if( !mxIsDouble(prhs[1]) || mxIsComplex(prhs[1]) ||
-            !(mxGetM(prhs[1])==1 && mxGetM(prhs[1])==1) ) 
+            !(mxGetM(prhs[1])==1 && mxGetM(prhs[1])==1) )
       mexErrMsgTxt("myo_mex init requires a numeric scalar countMyos as the second input.");
     
     // Get input counyMyos and set up collector accordingly
     countMyosRequired = *mxGetPr(prhs[1]);
     if (countMyosRequired==1)
-      collector.addEmgEnabled = true;      
+      collector.addEmgEnabled = true;
     
     // Instantiate a Hub and get a Myo
     pHub = new myo::Hub("com.mark-toma.myo_mex");
@@ -165,7 +165,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     hMutex = CreateMutex(NULL,FALSE,NULL);
     if (hMutex == NULL)
       mexErrMsgTxt("Failed to set up mutex.\n");
-
+    
     // Let Hub run callbacks on collector so we can figure out how many
     // Myos are connected to Myo Connect so we can assert countMyosRequired
     pHub->run(INIT_DELAY);
@@ -173,7 +173,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       mexErrMsgTxt("myo_mex failed to initialize with countMyos.\n");
     
     // Flush the data queues with syncDataSources
-    // Note: This pops the oldest samples of data off the front of all 
+    // Note: This pops the oldest samples of data off the front of all
     //   queues until only the most recent data remains
     collector.syncDataSources();
     
@@ -256,7 +256,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
           frameIMU1 = collector.getFrameIMU(1);
           fillOutputIMU(outData1,frameIMU1,iiIMU1,szIMU1);
           iiIMU1++;
-        } 
+        }
         while (iiEMG1<szEMG1) { // Read from Myo 1 EMG
           frameEMG1 = collector.getFrameEMG(1);
           fillOutputEMG(outData1,frameEMG1,iiEMG1,szEMG1);

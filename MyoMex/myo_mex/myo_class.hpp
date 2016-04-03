@@ -113,9 +113,9 @@ class MyoData
   }
   
   // sync<Pose/Arm/XDir>
-  // This event-based meta data is sampled on the EMG vector, so we fill 
-  // their queues up to the future size of emg to maintain consistency. 
-  // Things would theoretically break down if these events fired more 
+  // This event-based meta data is sampled on the EMG vector, so we fill
+  // their queues up to the future size of emg to maintain consistency.
+  // Things would theoretically break down if these events fired more
   // frequently than the emg data, but I think that's impossible. It's
   // highly unlikely for sure! But still, the boolean return values allow
   // for guarding against this case.
@@ -149,7 +149,7 @@ class MyoData
   // This updates the timestampEMG member to keep track of the EMG datas.
   // If it is detected that a sample of emg was skipped, the previous value
   // for that data source is copied to fill the gap. This operation sounds
-  // trivial, but it isn't quite as simple as you'd expect. Myo SDK 
+  // trivial, but it isn't quite as simple as you'd expect. Myo SDK
   // provides emg data samples in pairs for each unique timestamp. That is,
   // timeN emgN
   // time0 emg1
@@ -158,7 +158,7 @@ class MyoData
   // time1 emg4
   // timeK emg(2*K+1)
   // timeK emg(2*K+2)
-  // So then, we keep track of the number of new emg samples received 
+  // So then, we keep track of the number of new emg samples received
   // without a new timestamp in semEMG. Then pad emg with the last value if
   // it's detected that a sample was missed.
   // This is zero-order-hold interpolation of missing timeseries data.
@@ -249,10 +249,10 @@ public:
   unsigned int getCountEMG() { return countEMG; }
   
   // syncDataSources
-  // Pops data off of queues until there are at most two bad samples. 
+  // Pops data off of queues until there are at most two bad samples.
   // Subsequently, a third bad sample may fill the read head of the queue.
   // Use this functions to put the data vector into a known state. Throw
-  // away the first three samples of data read after this call. The rest 
+  // away the first three samples of data read after this call. The rest
   // should be contiguous on the maximum sample rate for the data source.
   void syncDataSources()
   {
@@ -267,7 +267,7 @@ public:
   // add<data> functions
   // All of these perform two operations:
   // * sync<type>
-  //   Syncs up the data queues that are being samples on the same time 
+  //   Syncs up the data queues that are being samples on the same time
   //   base.
   // * <data>.push(_<data>) pushes new data onto its queue
   void addQuat(const myo::Quaternion<float>& _quat, uint64_t timestamp)
@@ -318,17 +318,17 @@ public:
 // This class provides the link to Myo SDK, encapsulation of the MyoData
 // class that manages data queues for each Myo device, and provides access
 // to that data.
-// * Register this class with a myo::Hub to trigger calls back into the 
+// * Register this class with a myo::Hub to trigger calls back into the
 //   on<event> functions below.
-// * Call myo::Hub::run to allow callbacks to write data into the 
+// * Call myo::Hub::run to allow callbacks to write data into the
 //   encapsulated MyoData objects in knownMyos
-// * Call getFrameXXX(id) at most getCountXXX(id) times to read samples of 
-//   FrameXXX data, where id is the 1-indexed id for a Myo device with 
+// * Call getFrameXXX(id) at most getCountXXX(id) times to read samples of
+//   FrameXXX data, where id is the 1-indexed id for a Myo device with
 //   maximum value getCountMyos()
 class DataCollector : public myo::DeviceListener
 {
   std::vector<MyoData*> knownMyos;
-public: 
+public:
   bool addDataEnabled; // unset to disable callbacks (they'll fall-through)
   bool addEmgEnabled;
   DataCollector()

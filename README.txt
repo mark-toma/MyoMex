@@ -14,9 +14,6 @@ information in the help for MyoMex.
 # CHANGELOG - Release Notes
 
 2016-xx-xx 2.1 (pre-release)
-  
-move meta to imu time base
-disable emg when countMyos > 1
   * CHANGE in myo_mex.cpp, myo_class.hpp, MyoData.m
     Myo state meta data is now sampled on the IMU time base leaving EMG
     data decoupled from all other streams, and the EMG data is not enabled

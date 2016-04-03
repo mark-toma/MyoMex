@@ -54,19 +54,19 @@ classdef MyoData < handle
   %   mm.delete();
   %
   %   % Now the MyoData objects aren't receiving new data, but you can
-  %   % still use them to analyze, save, etc. the data you collected.  
-    
+  %   % still use them to analyze, save, etc. the data you collected.
+  
   properties
-  % newDataFcn  Callback to execute when new data is received
-  %   This is either the empty matrix when not set, or a function handle
-  %   conforming to the signature newDataFcn(source,eventdata,...) when
-  %   set. If newDataFcn is set, it is called when a new frame of data is
-  %   received from MyoMex.
-  %
-  %   Input parameter source is the handle to this MyoData object, and
-  %   eventdata is currently passed the empty matrix (reserved for future
-  %   use).
-  newDataFcn
+    % newDataFcn  Callback to execute when new data is received
+    %   This is either the empty matrix when not set, or a function handle
+    %   conforming to the signature newDataFcn(source,eventdata,...) when
+    %   set. If newDataFcn is set, it is called when a new frame of data is
+    %   received from MyoMex.
+    %
+    %   Input parameter source is the handle to this MyoData object, and
+    %   eventdata is currently passed the empty matrix (reserved for future
+    %   use).
+    newDataFcn
   end
   
   properties (SetAccess = private)
@@ -188,13 +188,13 @@ classdef MyoData < handle
     quat_log
     gyro_log
     gyro_fixed_log
-    accel_log       
-    accel_fixed_log 
-    pose_log        
-    arm_log         
-    timeEMG_log     
+    accel_log
+    accel_fixed_log
+    pose_log
+    arm_log
+    timeEMG_log
     emg_log
-    xDir_log        
+    xDir_log
     POSE_REST           = 0
     POSE_FIST           = 1
     POSE_WAVE_IN        = 2
@@ -234,8 +234,8 @@ classdef MyoData < handle
   end
   
   properties (Access=private,Hidden=true)
-    prevTimeIMU 
-    prevTimeEMG 
+    prevTimeIMU
+    prevTimeEMG
     
     % libmyo.h enum order: right, left, unknown
     % DeviceListener.hpp  enum order: left, right, unknown
@@ -284,7 +284,7 @@ classdef MyoData < handle
     function set.newDataFcn(this,val)
       assert(isempty(val)||(isa(val,'function_handle')&&(2==nargin(val))),...
         'Property newDataFcn must be the empty matrix when not set, or a function handles conforming to the signature newDataFcn(source,eventdata,...) when set.');
-      this.newDataFcn = val;      
+      this.newDataFcn = val;
     end
     
     %% --- Dependent Getters
@@ -424,7 +424,7 @@ classdef MyoData < handle
     
   end
   
-  methods (Access=private)  
+  methods (Access=private)
     
     %% --- Internal Data Management
     function addDataIMU(this,data,currTime)

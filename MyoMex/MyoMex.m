@@ -33,16 +33,16 @@ classdef MyoMex < handle
   % data out of the FIFO. The timer callback then calls back into the
   % MyoMex property myoData (a MyoData object) to provide it with the
   % latest batch of samples.
-   
+  
   properties
     newDataFcn
   end
   properties (SetAccess = private)
     % myo_data  Data objects for physical Myo devices
-    myoData;
+    myoData
   end
   properties (Dependent,Hidden=true)
-    currTime;
+    currTime
   end
   properties (Access=private,Hidden=true)
     timerStreamingData
@@ -56,7 +56,7 @@ classdef MyoMex < handle
     %% --- Object Management
     function this = MyoMex(countMyos)
       % MyoMex  Construct a MyoMex object
-      %   
+      %
       % Inputs:
       %   countMyos - Number of Myos
       %     Numerical scalar specifying the number of physical Myo devices
@@ -70,7 +70,7 @@ classdef MyoMex < handle
       %     variable throughout the lifecycle of MyoMex and then explicitly
       %     call the delete() method on the object when finished.
       assert(nargout==1,...
-        'MyoMex must be assigned to an output variable.');      
+        'MyoMex must be assigned to an output variable.');
       
       if nargin<1, countMyos = 1; end
       
@@ -116,12 +116,12 @@ classdef MyoMex < handle
         'myo_mex delete failed with message:\n\t''%s''',emsg);
       MyoMex.myo_mex_clear();
     end
-        
+    
     %% --- Setters
     function set.newDataFcn(this,val)
       assert(isempty(val)||(isa(val,'function_handle')&&(2==nargin(val))),...
         'Property newDataFcn must be the empty matrix when not set, or a function handles conforming to the signature newDataFcn(source,eventdata,...) when set.');
-      this.newDataFcn = val;      
+      this.newDataFcn = val;
     end
     
     %% --- Dependent Getters
