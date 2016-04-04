@@ -213,7 +213,11 @@ classdef MyoData < handle
     %
     % See also:
     %   quat, q2r, gyro, gyro_fixed, accel, accel_fixed
-    rot;
+    rot
+    % rateIMU  Approximate data rate for IMU data
+    rateIMU
+    % rateEMG  Approximate data rate for EMG data
+    rateEMG
   end
   
   properties (Dependent,Hidden=true)
@@ -288,6 +292,16 @@ classdef MyoData < handle
     end
     
     %% --- Dependent Getters
+    function val = get.rateIMU(this)
+      val = nan;
+      if isempty(this.timeIMU_log), return; end
+      val = length(this.timeIMU_log)/range(this.timeIMU_log);
+    end
+    function val = get.rateEMG(this)
+      val = nan;
+      if isempty(this.timeEMG_log), return; end
+      val = length(this.timeEMG_log)/range(this.timeEMG_log);
+    end
     function val = get.rot(this)
       if isempty(this.quat)
         val = [];

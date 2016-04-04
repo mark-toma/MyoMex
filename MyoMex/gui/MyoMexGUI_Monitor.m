@@ -79,9 +79,9 @@ varargout{1} = handles.output;
 function myoDataCloseCallback(hObject,id,handles)
 
 if id==1
-  set(cb_myo_data_1,'value',0);
+  set(handles.cb_myo_data_1,'value',0);
 elseif id==2
-  set(cb_myo_data_2,'value',0);
+  set(handles.cb_myo_data_2,'value',0);
 end
 
 handles.myoDataFig(id) = nan;
@@ -94,7 +94,7 @@ if get(hObject,'value')
   % spawn figure
   handles.myoDataFig(id) = MyoDataGUI_Monitor(...
     handles.myoMex.myoData(id),...
-    @()myoDataFigCallback(hObject,id,handles));
+    @()myoDataCloseCallback(hObject,id,handles));
 else
   % close figure
   close(handles.myoDataFig(id));
@@ -164,19 +164,48 @@ function pb_init_Callback(hObject, eventdata, handles)
 
 countMyos = str2double(get(handles.et_count_myos,'string'));
 
-try
-  handles.myoMex = MyoMex(countMyos);
-catch err
-  warndlg(...
-    sprintf('MyoMex(%d) failed with message:\n\n''''\n',countMyos,err.message),...
-    'MyoMex Initialization Error','modal');
-  return;
-end
-
-% here everything initialized fine
-set(handles.cb_myo_data_1,'enable','on');
-if countMyos>1
-  set(handles.cb_myo_data_2,'enable','on');
+switch get(hObject,'string')
+  case 'Init MyoMex'
+    try
+      handles.myoMex = MyoMex(countMyos);
+    catch err
+      warndlg(...
+        sprintf('MyoMex(%d) failed with message:\n\n''''\n',countMyos,err.message),...
+        'MyoMex Initialization Error','modal');
+      return;
+    end
+    
+    % here everything initialized fine
+    set(handles.cb_myo_data_1,'enable','on');
+    if countMyos>1
+      set(handles.cb_myo_data_2,'enable','on');
+    end
+    
+    set(handles.et_count_myos,'enable','off');
+    set(hObject,'string','Delete MyoMex');
+    
+  case 'Delete MyoMex'
+    
+    handles.myoMex.delete();
+    handles.myoMex = [];
+    
+    % close figures if they exist
+    % kill myoData monitor figures
+    for ii=1:length(handles.myoDataFig)
+      if isnan(handles.myoDataFig(ii)), continue; end
+      close(handles.myoDataFig(ii));
+      handles.myoDataFig(ii) = nan;
+    end
+    
+    % disable checkboxes
+    set(handles.cb_myo_data_1,'value',0,'enable','off');
+    set(handles.cb_myo_data_2,'value',0,'enable','off');
+    
+    % enable count myos et
+    set(handles.et_count_myos,'enable','on');
+    
+    set(hObject,'string','Init MyoMex');
+    
 end
 
 guidata(hObject,handles);
@@ -190,7 +219,12 @@ if ~isempty(handles.myoMex)
   handles.myoMex.delete();
 end
 
-
+% kill myoData monitor figures
+for ii=1:length(handles.myoDataFig)
+  if isnan(handles.myoDataFig(ii)), continue; end
+  close(handles.myoDataFig(ii));
+  delete(handles.myoDataFig(ii));
+end
 
 % Hint: delete(hObject) closes the figure
 delete(hObject);

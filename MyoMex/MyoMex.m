@@ -111,7 +111,11 @@ classdef MyoMex < handle
     
     function delete(this)
       % delete  Clean up MyoMex instance of MEX function myo_mex
+      for ii = 1:length(this.myoData)
+        delete(this.myoData(ii));
+      end
       this.stopStreaming();
+      
       [fail,emsg] = MyoMex.myo_mex_delete;
       assert(~fail,...
         'myo_mex delete failed with message:\n\t''%s''',emsg);

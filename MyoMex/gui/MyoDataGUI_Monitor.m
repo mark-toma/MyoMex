@@ -265,13 +265,8 @@ timeIMU = m.timeIMU_log;
 iiIMU = find(timeIMU>=(timeIMU(end)-handles.const.STRIP_TIME));
 tIMU = timeIMU(iiIMU);
 
-timeEMG = m.timeEMG_log;
-iiEMG = find(timeEMG>=(timeEMG(end)-handles.const.STRIP_TIME));
-tEMG = timeEMG(iiEMG);
-
 q = m.quat_log(iiIMU,:);
-e = m.emg_log(iiEMG,:);
-p = m.pose_log(iiEMG,:);
+p = m.pose_log(iiIMU,:);
 
 if get(handles.rb_fixed,'value')
   g = m.gyro_fixed_log(iiIMU,:);
@@ -296,24 +291,19 @@ set(hp.accel(2),'xdata',tIMU,'ydata',a(:,2));
 set(hp.accel(3),'xdata',tIMU,'ydata',a(:,3));
 set(hp.accel(4),'xdata',tIMU,'ydata',sqrt(sum(a'.^2))'-1);
 
-for ii = 1:size(e,2)-1
-  set(hp.emg(ii),'xdata',tEMG,'ydata',e(:,ii));
-end
-set(hp.emg(end),'xdata',tEMG,'ydata',sqrt(sum(e'.^2)/8)');
-
-tpose = tEMG(m.pose_fist_log(iiEMG));
+tpose = tIMU(m.pose_fist_log(iiIMU));
 set(hp.pose(1),'xdata',tpose,...
   'ydata',ones(1,length(tpose))*handles.const.POSE_YDATA_VALUE);
-tpose = tEMG(m.pose_wave_in_log(iiEMG));
+tpose = tIMU(m.pose_wave_in_log(iiIMU));
 set(hp.pose(2),'xdata',tpose,...
   'ydata',ones(1,length(tpose))*handles.const.POSE_YDATA_VALUE);
-tpose = tEMG(m.pose_wave_out_log(iiEMG));
+tpose = tIMU(m.pose_wave_out_log(iiIMU));
 set(hp.pose(3),'xdata',tpose,...
   'ydata',ones(1,length(tpose))*handles.const.POSE_YDATA_VALUE);
-tpose = tEMG(m.pose_fingers_spread_log(iiEMG));
+tpose = tIMU(m.pose_fingers_spread_log(iiIMU));
 set(hp.pose(4),'xdata',tpose,...
   'ydata',ones(1,length(tpose))*handles.const.POSE_YDATA_VALUE);
-tpose = tEMG(m.pose_double_tap_log(iiEMG));
+tpose = tIMU(m.pose_double_tap_log(iiIMU));
 set(hp.pose(5),'xdata',tpose,...
   'ydata',ones(1,length(tpose))*handles.const.POSE_YDATA_VALUE);
 
@@ -344,13 +334,26 @@ if handles.image_pose_enabled
   end
 end
 
+% update emg data
+timeEMG = m.timeEMG_log;
+if ~isempty(timeEMG)
+  iiEMG = find(timeEMG>=(timeEMG(end)-handles.const.STRIP_TIME));
+  tEMG = timeEMG(iiEMG);
+  e = m.emg_log(iiEMG,:);
+  
+  for ii = 1:size(e,2)-1
+    set(hp.emg(ii),'xdata',tEMG,'ydata',e(:,ii));
+  end
+  set(hp.emg(end),'xdata',tEMG,'ydata',sqrt(sum(e'.^2)/8)');
+end
+
 % update axes time limits
 tmp = [...
   handles.ax_quat_strip,...
   handles.ax_gyro_strip,...
   handles.ax_accel_strip,...
   handles.ax_emg_strip];
-set(tmp,'xlim',m.timeEMG - [handles.const.STRIP_TIME,0]);
+set(tmp,'xlim',m.timeIMU - [handles.const.STRIP_TIME,0]);
 
 
 % update orientation view
@@ -360,6 +363,9 @@ R = Rcurr;
 
 H = [R,[0;0;0];0,0,0,1];
 set(hp.hx_body,'matrix',H);
+
+set(handles.st_imu_rate,'string',sprintf('%7.3f',m.rateIMU));
+set(handles.st_emg_rate,'string',sprintf('%7.3f',m.rateEMG));
 
 drawnow;%('EXPOSE');
 
@@ -417,9 +423,10 @@ function figure1_CloseRequestFcn(hObject, eventdata, handles)
 
 % force deletion if not performed manually
 stop(handles.update_timer);
-
-
-%if ~isempty(handles.closeFunc), handles.closeFunc(); end
+delete(handles.update_timer);
+if ~isempty(handles.closeFunc)
+  handles.closeFunc();
+end
 
 % Hint: delete(hObject) closes the figure
 delete(hObject);
