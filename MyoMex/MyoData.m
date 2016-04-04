@@ -23,10 +23,6 @@ classdef MyoData < handle
   %   m.gyro_fixed  % fixed frame gyro  - computed from gyro and quat
   %   m.accel       % sensor frame accel
   %   m.accel_fixed % fixed frame accel - computed from accel and quat
-  
-  %
-  %   m.timeEMG % corresponds to all other data listed below
-  %   m.emg
   %   m.pose        % enumerated data - logical values below
   %   m.pose_rest
   %   m.pose_fist
@@ -42,6 +38,9 @@ classdef MyoData < handle
   %   m.xDir_elbow
   %   m.xDir_unknown
   %
+  %   m.timeEMG % corresponds to all other data listed below
+  %   m.emg
+  %
   %   % Inspect the <data>_log properties
   %   % Just append "_log" to all of the <data> property names above. Take
   %   % care to use the correct time vectors. Here, I'll generate a plot.
@@ -55,104 +54,204 @@ classdef MyoData < handle
   %   mm.delete();
   %
   %   % Now the MyoData objects aren't receiving new data, but you can
-  %   % still use them to analyze, save, etc. the data you collected.  
-    
+  %   % still use them to analyze, save, etc. the data you collected.
+  
+  properties
+    % newDataFcn  Callback to execute when new data is received
+    %   This is either the empty matrix when not set, or a function handle
+    %   conforming to the signature newDataFcn(source,eventdata,...) when
+    %   set. If newDataFcn is set, it is called when a new frame of data is
+    %   received from MyoMex.
+    %
+    %   Input parameter source is the handle to this MyoData object, and
+    %   eventdata is currently passed the empty matrix (reserved for future
+    %   use).
+    newDataFcn
+  end
+  
   properties (SetAccess = private)
-    
+    % timeIMU  Time of sampling for IMU data
+    %   This is the time at which the inertial measurement unit (IMU) data
+    %   is sampled (at 50Hz). The Myo's IMU data includes quat, gyro, and
+    %   accel. Other data such as rot, gyro_fixed, and accel_fixed are
+    %   computed from the IMU data.
+    %   Other data such as pose, arm, and xDir are also sampled on this
+    %   time base.
+    %
+    % See also:
+    %   quat, gyro, accel, rot, gyro_fixed, accel_fixed, pose, arm, xDir
     timeIMU
+    % quat  Quaternion representing orientation of Myo
+    %   This is a 1x4 array of unit quaternion elements with the scalar
+    %   part listed first. That is, if q = s + vx*i + vy*j + vz*k, then
+    %   quat = [s,vx,vy,vz].
+    %
+    %   Furthermore, the interpretation of quat as a
+    %   rotation or transformation depends on the definition of quaternion
+    %   rotation. In this implementation, we obtain the vector r by
+    %   rotating a vector p by quaternion q using typical quaternion
+    %   multiplication such that [0;r] = q*[0;p]*q^-1. In this sense, quat
+    %   rotates vector p from components in the sensor frame to components
+    %   in the fixed frame of reference. Such a linear transformation is
+    %   also obtained by premultiplication of p by the rotation matrix rot.
+    %
+    % See also:
+    %   rot, q2r, qRot, qMult, qInv, qRenorm
     quat
+    % gyro  Gyroscope data in sensor frame [deg/s]
+    %   This is a 1x3 array of body angular velocity components represented
+    %   in Myo's sensor frame. Fixed frame gyro data is computed and stored
+    %   in gyro_fixed.
+    %
+    % See also:
+    %   gyro_fixed
     gyro
+    % gyro_fixed  Gyroscope data in fixed frame [deg/s]
+    %   Computed from quat (or rot) and gyro.
+    %
+    % See also:
+    %   quat, rot, gyro
     gyro_fixed
+    % accel  Accelerometer data in sensor frame [g]
+    %   This is a 1x3 array of measured acceleration due to gravity with
+    %   components represented in Myo's sensor frame. Fixed frame accel data is
+    %   computed and stored in accel_fixed.
+    %
+    % See also:
+    %   accel_fixed
     accel
+    % accel_fixed  Accelerometer data in fixed frame [g]
+    %   Computed from quat (or rot) and accel.
+    %
+    % See also:
+    %   quat, rot, accel
     accel_fixed
-    
-    timeEMG
-    emg
+    % pose  Indicates the currently detected gesture (enum)
+    %   This is an enumerated value. Access logical indication of a
+    %   particular pose with the pose_suffix properties where suffix is the
+    %   name of the pose.
+    %
+    % See also:
+    %   pose_rest, pose_fist, pose_wave_in, pose_wave_out,
+    %   pose_fingers_spread, pose_double_tap, pose_unknown
     pose
-    
-    arm
-    xDir
-    
-    pose_rest
-    pose_fist
-    pose_wave_in
-    pose_wave_out
-    pose_fingers_spread
-    pose_double_tap
-    pose_unknown
-    
-    arm_left
-    arm_right
-    arm_unknown
-    
-    xDir_wrist
-    xDir_elbow
-    xDir_unknown
-    
-    isStreaming = true;
-    
+    pose_rest % Indicates  pose from enum value in pose (logical)
+    pose_fist % Indicates  pose from enum value in pose (logical)
+    pose_wave_in % Indicates  pose from enum value in pose (logical)
+    pose_wave_out % Indicates  pose from enum value in pose (logical)
+    pose_fingers_spread % Indicates  pose from enum value in pose (logical)
+    pose_double_tap % Indicates  pose from enum value in pose (logical)
+    pose_unknown % Indicates  pose from enum value in pose (logical)
+    % arm  Indicates which arm Myo is worn on by the user (enum)
+    %   This is an enumerated value. Access logical indication of a
+    %   particular arm with the arm_suffix properties where suffix is the
+    %   name of the arm.
+    %
+    % See also:
+    %   arm_right, arm_left, arm_unknown
+    arm % Indicates which arm Myo is worn on by the user (enum)
+    arm_left % Indicates arm from enum value in arm (logical)
+    arm_right % Indicates arm from enum value in arm (logical)
+    arm_unknown % Indicates arm from enum value in arm (logical)
+    % xDir  Indicates direction of Myo sensor x-axis on user's arm (enum)
+    %   This is an enumerated value. Access logical indication of a
+    %   particular xDir with the xDir_suffix properties where suffix is the
+    %   name of the xDir.
+    %
+    % See also:
+    %   xDir_wrist, xDir_elbow, xDir_unknown
+    xDir % Indicates direction of Myo sensor x-axis on user's arm (enum)
+    xDir_wrist % Indicates xDir from enum value in xDir (logical)
+    xDir_elbow % Indicates xDir from enum value in xDir (logical)
+    xDir_unknown % Indicates xDir from enum value in xDir (logical)
+    % timeEMG  Time of sampling for sEMG data
+    %   This is the time at which the sEMG data is sampled (at 200Hz).
+    %
+    % See also:
+    %   emg
+    timeEMG
+    % emg  Raw data from 8 surface EMG (sEMG) sensors
+    %   This is a 1x8 array of sEMG data in the range [-1,1] sampled at a
+    %   rate of 200Hz.
+    emg
+    % isStreaming  Indicates status of data logging (logical)
+    %   This state is toggled by methods startStreaming and
+    %   stopStreaming
+    %
+    % See also:
+    %   startStreaming, stopStreaming
+    isStreaming = true
   end
   
   properties (SetAccess=private,Hidden=true)
-    timeIMU_log     = [];
-    quat_log        = [];
-    gyro_log        = [];
-    gyro_fixed_log  = [];
-    accel_log       = [];
-    accel_fixed_log = [];
-    timeEMG_log     = [];
-    emg_log         = [];
-    pose_log        = [];
-    arm_log         = [];
-    xDir_log        = [];
-    POSE_REST           = 0;
-    POSE_FIST           = 1;
-    POSE_WAVE_IN        = 2;
-    POSE_WAVE_OUT       = 3;
-    POSE_FINGERS_SPREAD = 4;
-    POSE_DOUBLE_TAP     = 5;
-    POSE_UNKNOWN        = hex2dec('ffff');
+    timeIMU_log
+    quat_log
+    gyro_log
+    gyro_fixed_log
+    accel_log
+    accel_fixed_log
+    pose_log
+    arm_log
+    timeEMG_log
+    emg_log
+    xDir_log
+    POSE_REST           = 0
+    POSE_FIST           = 1
+    POSE_WAVE_IN        = 2
+    POSE_WAVE_OUT       = 3
+    POSE_FINGERS_SPREAD = 4
+    POSE_DOUBLE_TAP     = 5
+    POSE_UNKNOWN        = hex2dec('ffff')
   end
   
   properties (Dependent)
+    % rot  Rotation matrix representing the orientation of Myo
+    %   This is a 3x3 orthonormal matrix. Computed from quat, this rotation
+    %   matrix transforms a 3x1 vector p from coordinates in the sensor
+    %   frame to a vector r with coordinates in the fixed frame according
+    %   to r = rot*p.
+    %
+    % See also:
+    %   quat, q2r, gyro, gyro_fixed, accel, accel_fixed
     rot;
   end
   
   properties (Dependent,Hidden=true)
-    rot_log;
-    pose_rest_log;
-    pose_fist_log;
-    pose_wave_in_log;
-    pose_wave_out_log;
-    pose_fingers_spread_log;
-    pose_double_tap_log;
-    pose_unknown_log;
-    arm_left_log;
-    arm_right_log;
-    arm_unknown_log;
-    xDir_wrist_log;
-    xDir_elbow_log;
-    xDir_unknown_log;
+    rot_log
+    pose_rest_log
+    pose_fist_log
+    pose_wave_in_log
+    pose_wave_out_log
+    pose_fingers_spread_log
+    pose_double_tap_log
+    pose_unknown_log
+    arm_left_log
+    arm_right_log
+    arm_unknown_log
+    xDir_wrist_log
+    xDir_elbow_log
+    xDir_unknown_log
   end
   
   properties (Access=private,Hidden=true)
-    prevTimeIMU = [];
-    prevTimeEMG = [];
+    prevTimeIMU
+    prevTimeEMG
     
     % libmyo.h enum order: right, left, unknown
     % DeviceListener.hpp  enum order: left, right, unknown
-    ARM_RIGHT     = 0;
-    ARM_LEFT      = 1;
-    ARM_UNKNOWN   = 2;
+    ARM_RIGHT     = 0
+    ARM_LEFT      = 1
+    ARM_UNKNOWN   = 2
     
-    XDIR_WRIST    = 0;
-    XDIR_ELBOW    = 1;
-    XDIR_UNKNOWN  = 2;
+    XDIR_WRIST    = 0
+    XDIR_ELBOW    = 1
+    XDIR_UNKNOWN  = 2
     
-    IMU_SAMPLE_TIME = 0.020; %  50Hz
-    EMG_SAMPLE_TIME = 0.005; % 200Hz
-    EMG_SCALE = 128;
-    RESTART_DELAY = 0.5;
+    IMU_SAMPLE_TIME = 0.020 %  50Hz
+    EMG_SAMPLE_TIME = 0.005 % 200Hz
+    EMG_SCALE       = 128
+    
+    NUM_INIT_SAMPLES = 4
   end
   
   methods
@@ -179,6 +278,13 @@ classdef MyoData < handle
     
     function delete(this)
       
+    end
+    
+    %% --- Setters
+    function set.newDataFcn(this,val)
+      assert(isempty(val)||(isa(val,'function_handle')&&(2==nargin(val))),...
+        'Property newDataFcn must be the empty matrix when not set, or a function handles conforming to the signature newDataFcn(source,eventdata,...) when set.');
+      this.newDataFcn = val;
     end
     
     %% --- Dependent Getters
@@ -311,17 +417,23 @@ classdef MyoData < handle
       for ii=1:length(this)
         this(ii).addDataIMU(data(ii),currTime);
         this(ii).addDataEMG(data(ii),currTime);
+        this(ii).onNewData();
       end
+      
     end
     
   end
   
   methods (Access=private)
+    
     %% --- Internal Data Management
     function addDataIMU(this,data,currTime)
-      if isempty(data.quat), return; end
-      
       N = size(data.quat,1);
+      if N==0, return; end
+      P = this.NUM_INIT_SAMPLES;
+      assert( ~(isempty(this.prevTimeIMU)&&(N<P)),...
+        'Too few samples received in initialization of log.');
+      
       t = (1:1:N)' * this.IMU_SAMPLE_TIME;
       
       q = data.quat;
@@ -330,17 +442,24 @@ classdef MyoData < handle
       q = this.qRenorm(q); %renormalize quaterions
       gf = this.qRot(q,g);
       af = this.qRot(q,a);
+      p = data.pose;
+      m = data.arm;
+      x = data.xDir;
       
       if ~isempty(this.prevTimeIMU)
         t = t + this.prevTimeIMU;
       else % init time
         t = t - t(end) + currTime;
-        t = t(2:end,:);
-        q = q(2:end,:);
-        g = g(2:end,:);
-        gf = gf(2:end,:);
-        a = a(2:end,:);
-        af = af(2:end,:);
+        % chop off first P data points
+        t  =  t(P+1:end,:);
+        q  =  q(P+1:end,:);
+        g  =  g(P+1:end,:);
+        gf = gf(P+1:end,:);
+        a  =  a(P+1:end,:);
+        af = af(P+1:end,:);
+        p  =  p(P+1:end,:);
+        m  =  m(P+1:end,:);
+        x  =  x(P+1:end,:);
       end
       
       this.prevTimeIMU = t(end);
@@ -351,64 +470,64 @@ classdef MyoData < handle
       this.gyro_fixed = gf(end,:);
       this.accel = a(end,:);
       this.accel_fixed = af(end,:);
+      this.pose = p(end,:);
+      this.arm = m(end,:);
+      this.xDir = x(end,:);
       
-      if this.isStreaming, this.pushLogsIMU(t,q,g,gf,a,af); end
+      if this.isStreaming, this.pushLogsIMU(t,q,g,gf,a,af,p,m,x); end
       
     end
     
     function addDataEMG(this,data,currTime)
-      if isempty(data.emg), return; end
-      
       N = size(data.emg,1);
+      if N==0, return; end
+      P = this.NUM_INIT_SAMPLES;
+      assert( ~(isempty(this.prevTimeEMG)&&(N<P)),...
+        'Too few samples received in initialization of log.');
+      
       t = (1:1:N)' * this.EMG_SAMPLE_TIME;
       
       e = data.emg./this.EMG_SCALE;
-      p = data.pose;
-      a = data.arm;
-      x = data.xDir;
       
       if ~isempty(this.prevTimeEMG)
         t = t + this.prevTimeIMU;
       else % init time
         t = t - t(end) + currTime;
-        % chop off first data point
-        t = t(2:end,:);
-        e = e(2:end,:);
-        p = p(2:end,:);
-        a = a(2:end,:);
-        x = x(2:end,:);
+        % chop off first P data points
+        t = t(P+1:end,:);
+        e = e(P+1:end,:);
       end
       this.prevTimeEMG = t(end);
       
-
-      
       this.timeEMG = t(end,:);
       this.emg = e(end,:);
-      this.pose = p(end,:);
-      this.arm = a(end,:);
-      this.xDir = x(end,:);
       
-      if this.isStreaming, this.pushLogsEMG(t,e,p,a,x); end
+      if this.isStreaming, this.pushLogsEMG(t,e); end
       
     end
     
-    function pushLogsIMU(this,t,q,g,gf,a,af)
+    function pushLogsIMU(this,t,q,g,gf,a,af,p,m,x)
       this.timeIMU_log     = [ this.timeIMU_log     ; t  ];
       this.quat_log        = [ this.quat_log        ; q  ];
       this.gyro_log        = [ this.gyro_log        ; g  ];
       this.gyro_fixed_log  = [ this.gyro_fixed_log  ; gf ];
       this.accel_log       = [ this.accel_log       ; a  ];
       this.accel_fixed_log = [ this.accel_fixed_log ; af ];
+      this.pose_log        = [ this.pose_log        ; p  ];
+      this.arm_log         = [ this.arm_log         ; m  ];
+      this.xDir_log        = [ this.xDir_log        ; x  ];
     end
     
-    function pushLogsEMG(this,t,e,p,a,x)
+    function pushLogsEMG(this,t,e)
       this.timeEMG_log   = [ this.timeEMG_log ; t ];
       this.emg_log       = [ this.emg_log     ; e ];
-      this.pose_log      = [ this.pose_log    ; p ];
-      this.arm_log       = [ this.arm_log     ; a ];
-      this.xDir_log      = [ this.xDir_log    ; x ];
     end
     
+    function onNewData(this)
+      if ~isempty(this.newDataFcn)
+        this.newDataFcn(this,[]);
+      end
+    end
   end
   
   methods (Static=true)

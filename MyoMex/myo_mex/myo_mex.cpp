@@ -1,7 +1,7 @@
 // comment the following line to remove debug output via mexPrintf()
 //#define DEBUG_MYO_MEX
 #ifdef DEBUG_MYO_MEX
-#define DB_MYO_MEX(fmt, ...) printf(fmt, ##__VA_ARGS__)
+#define DB_MYO_MEX(fmt, ...) mexPrintf(fmt, ##__VA_ARGS__)
 #else
 #define DB_MYO_MEX(fmt, ...)
 #endif
@@ -15,23 +15,22 @@
 
 // indeces of output args (into plhs[*])
 #define DATA_STRUCT_OUT_NUM    0
-#define NUM_MYOS_OUT_NUM       0
 
 // indeces of data fields into data output struct
 #define QUAT_FIELD_NUM        0
 #define GYRO_FIELD_NUM        1
 #define ACCEL_FIELD_NUM       2
-#define EMG_FIELD_NUM         3
-#define POSE_FIELD_NUM        4
-#define ARM_FIELD_NUM         5
-#define XDIR_FIELD_NUM        6
+#define POSE_FIELD_NUM        3
+#define ARM_FIELD_NUM         4
+#define XDIR_FIELD_NUM        5
+#define EMG_FIELD_NUM         6
 #define NUM_FIELDS            7
-const char* output_fields[] = {"quat","gyro","accel","emg","pose","arm","xDir"};
+const char* output_fields[] = {"quat","gyro","accel","pose","arm","xDir","emg"};
 
 // program behavior parameters
-#define STREAMING_TIMEOUT    5L
+#define STREAMING_TIMEOUT    5
 #define INIT_DELAY        1000
-#define RESTART_DELAY 500
+#define RESTART_DELAY      500
 
 // program state
 volatile bool runThreadFlag = false;
@@ -84,12 +83,12 @@ void makeOutputIMU(mxArray *outData[], unsigned int sz) {
   outData[QUAT_FIELD_NUM]   = mxCreateNumericMatrix(sz,4,mxDOUBLE_CLASS,mxREAL);
   outData[GYRO_FIELD_NUM]   = mxCreateNumericMatrix(sz,3,mxDOUBLE_CLASS,mxREAL);
   outData[ACCEL_FIELD_NUM]  = mxCreateNumericMatrix(sz,3,mxDOUBLE_CLASS,mxREAL);
-}
-void makeOutputEMG(mxArray *outData[], unsigned int sz) {
-  outData[EMG_FIELD_NUM]         = mxCreateNumericMatrix(sz,8,mxDOUBLE_CLASS,mxREAL);
   outData[POSE_FIELD_NUM]        = mxCreateNumericMatrix(sz,1,mxDOUBLE_CLASS,mxREAL);
   outData[ARM_FIELD_NUM]         = mxCreateNumericMatrix(sz,1,mxDOUBLE_CLASS,mxREAL);
   outData[XDIR_FIELD_NUM]        = mxCreateNumericMatrix(sz,1,mxDOUBLE_CLASS,mxREAL);
+}
+void makeOutputEMG(mxArray *outData[], unsigned int sz) {
+  outData[EMG_FIELD_NUM]         = mxCreateNumericMatrix(sz,8,mxDOUBLE_CLASS,mxREAL);
 }
 void fillOutputIMU(mxArray *outData[], FrameIMU f,
         unsigned int row,unsigned int sz) {
@@ -103,15 +102,15 @@ void fillOutputIMU(mxArray *outData[], FrameIMU f,
   *( mxGetPr(outData[ACCEL_FIELD_NUM]) + row+sz*0 ) = f.accel.x();
   *( mxGetPr(outData[ACCEL_FIELD_NUM]) + row+sz*1 ) = f.accel.y();
   *( mxGetPr(outData[ACCEL_FIELD_NUM]) + row+sz*2 ) = f.accel.z();
+  *( mxGetPr(outData[POSE_FIELD_NUM])  + row )       = f.pose.type();
+  *( mxGetPr(outData[ARM_FIELD_NUM])   + row )       = f.arm;
+  *( mxGetPr(outData[XDIR_FIELD_NUM])  + row )       = f.xDir;
 }
 void fillOutputEMG(mxArray *outData[], FrameEMG f,
         unsigned int row,unsigned int sz) {
   int jj = 0;
   for (jj;jj<8;jj++)
     *( mxGetPr(outData[EMG_FIELD_NUM]) + row+sz*jj ) = f.emg[jj];
-  *( mxGetPr(outData[POSE_FIELD_NUM])  + row )       = f.pose.type();
-  *( mxGetPr(outData[ARM_FIELD_NUM])   + row )       = f.arm;
-  *( mxGetPr(outData[XDIR_FIELD_NUM])  + row )       = f.xDir;
 }
 void assnOutputStruct(mxArray *s, mxArray *d[], int id) {
   int ii = 0;
@@ -139,6 +138,16 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     // ----------------------------------------- myo_mex init -------------
     if ( mexIsLocked() )
       mexErrMsgTxt("myo_mex is already initialized.\n");
+    if ( nrhs<2 )
+      mexErrMsgTxt("myo_mex init requires 2 inputs.\n");
+    if( !mxIsDouble(prhs[1]) || mxIsComplex(prhs[1]) ||
+            !(mxGetM(prhs[1])==1 && mxGetM(prhs[1])==1) )
+      mexErrMsgTxt("myo_mex init requires a numeric scalar countMyos as the second input.");
+    
+    // Get input counyMyos and set up collector accordingly
+    countMyosRequired = *mxGetPr(prhs[1]);
+    if (countMyosRequired==1)
+      collector.addEmgEnabled = true;
     
     // Instantiate a Hub and get a Myo
     pHub = new myo::Hub("com.mark-toma.myo_mex");
@@ -149,7 +158,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
       mexErrMsgTxt("Myo failed to init!");
     
     // configure myo and hub
-    pHub->setLockingPolicy(myo::Hub::lockingPolicyNone);
+    pHub->setLockingPolicy(myo::Hub::lockingPolicyNone); // TODO: What does this do?
     pHub->addListener(&collector);
     
     // instantiate mutex
@@ -157,31 +166,22 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     if (hMutex == NULL)
       mexErrMsgTxt("Failed to set up mutex.\n");
     
+    // Let Hub run callbacks on collector so we can figure out how many
+    // Myos are connected to Myo Connect so we can assert countMyosRequired
+    pHub->run(INIT_DELAY);
+    if (countMyosRequired!=collector.getCountMyos())
+      mexErrMsgTxt("myo_mex failed to initialize with countMyos.\n");
+    
+    // Flush the data queues with syncDataSources
+    // Note: This pops the oldest samples of data off the front of all
+    //   queues until only the most recent data remains
+    collector.syncDataSources();
+    
     // At this point we don't anticipate and errors, so we commit to
     // locking this file's memory
     // Note: The mexLock status is used to determine the initialization
     //   state in other calls
     mexLock();
-    
-    // Let Hub run callbacks on collector so we can figure out how many
-    // Myos are connected to Myo Connect
-    pHub->run(INIT_DELAY);
-    unsigned int countMyos = collector.getCountMyos();
-    
-    // Flush the data queues with syncDataSources
-    // Note: This pops the oldest samples of data off the front of all 
-    //   queues until only the most recent data remains
-    collector.syncDataSources();
-    
-    // Return countMyos to MATLAB workspace
-    // Note: The MATLAB code can be built to expect exactly this many Myos
-    //   worth of data
-    plhs[NUM_MYOS_OUT_NUM] = mxCreateNumericMatrix(1,1,mxDOUBLE_CLASS,mxREAL);
-    *mxGetPr(plhs[NUM_MYOS_OUT_NUM]) = countMyos;
-    
-    // Hold onto countMyos in countMyosRequired
-    // Note: In future calls we error out if collector lost a Myo
-    countMyosRequired = countMyos;
     
   } else if ( !strcmp("start_streaming",cmd) ) {
     // ----------------------------------------- myo_mex start_streaming --
@@ -256,7 +256,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
           frameIMU1 = collector.getFrameIMU(1);
           fillOutputIMU(outData1,frameIMU1,iiIMU1,szIMU1);
           iiIMU1++;
-        } 
+        }
         while (iiEMG1<szEMG1) { // Read from Myo 1 EMG
           frameEMG1 = collector.getFrameEMG(1);
           fillOutputEMG(outData1,frameEMG1,iiEMG1,szEMG1);
