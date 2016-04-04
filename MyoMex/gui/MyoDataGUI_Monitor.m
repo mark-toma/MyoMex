@@ -353,7 +353,7 @@ tmp = [...
   handles.ax_gyro_strip,...
   handles.ax_accel_strip,...
   handles.ax_emg_strip];
-set(tmp,'xlim',m.timeEMG - [handles.const.STRIP_TIME,0]);
+set(tmp,'xlim',m.timeIMU - [handles.const.STRIP_TIME,0]);
 
 
 % update orientation view
@@ -423,9 +423,10 @@ function figure1_CloseRequestFcn(hObject, eventdata, handles)
 
 % force deletion if not performed manually
 stop(handles.update_timer);
-
-
-%if ~isempty(handles.closeFunc), handles.closeFunc(); end
+delete(handles.update_timer);
+if ~isempty(handles.closeFunc)
+  handles.closeFunc();
+end
 
 % Hint: delete(hObject) closes the figure
 delete(hObject);

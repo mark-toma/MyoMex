@@ -293,9 +293,13 @@ classdef MyoData < handle
     
     %% --- Dependent Getters
     function val = get.rateIMU(this)
+      val = nan;
+      if isempty(this.timeIMU_log), return; end
       val = length(this.timeIMU_log)/range(this.timeIMU_log);
     end
     function val = get.rateEMG(this)
+      val = nan;
+      if isempty(this.timeEMG_log), return; end
       val = length(this.timeEMG_log)/range(this.timeEMG_log);
     end
     function val = get.rot(this)
