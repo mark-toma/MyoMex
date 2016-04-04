@@ -26,6 +26,14 @@ information in the help for MyoMex.
     two separate Bluetooth Smart radios. Since this involves hardware
     dependencies and (essentially) rewriting of Myo SDK code, it will not
     be attempted in the future of this project.
+  * KNOWN ISSUE
+    Sometimes MyoData will not receive all expected samples. From testing,
+    it's observed that this usually occurs when using two Myos after
+    repeatedly connecting and disconnecting Myos in Myo Connect. In all
+    cases thus far, this problem has been resolved by restarting Myo 
+    Connect. Users should check the number of samples obtained against a
+    time duration (i.e. tic; dur = toc;) to verify the appriximate sample
+    rate of captured data.
   * CHANGE in myo_mex.cpp, myo_class.hpp, MyoData.m
     Myo state meta data is now sampled on the IMU time base leaving EMG
     data decoupled from all other streams, and the EMG data is not enabled

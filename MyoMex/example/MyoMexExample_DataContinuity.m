@@ -62,31 +62,28 @@ tIMU1 = m(1).timeIMU_log(2:end);
 qd1 = idDuplicates(m(1).quat_log);
 gd1 = idDuplicates(m(1).gyro_log);
 ad1 = idDuplicates(m(1).accel_log);
-tIMU2 = m(2).timeIMU_log(2:end);
-qd2 = idDuplicates(m(2).quat_log);
-gd2 = idDuplicates(m(2).gyro_log);
-ad2 = idDuplicates(m(2).accel_log);
 
-if countMyos==1
+if countMyos == 2
+  tIMU2 = m(2).timeIMU_log(2:end);
+  qd2 = idDuplicates(m(2).quat_log);
+  gd2 = idDuplicates(m(2).gyro_log);
+  ad2 = idDuplicates(m(2).accel_log);
+elseif countMyos==1
   tEMG1 = m(1).timeEMG_log(2:end);
   ed1 = idDuplicates(m(1).emg_log);
-  tEMG2 = m(2).timeEMG_log(2:end);
-  ed2 = idDuplicates(m(2).emg_log);
 end
 
 figure;
-
-subplot(2,1,1);
+if countMyos == 2, subplot(2,1,1); end
 plot(tIMU1,1*qd1,'r',tIMU1,2*gd1,'g',tIMU1,3*ad1,'b'); legCell = {'quat','gyro','accel'};
 if countMyos == 1, hold on; plot(tEMG1,4*ed1,'k'); legCell{4} = 'emg'; end 
 legend(legCell);
+if countMyos == 2
+  subplot(2,1,2);
+  plot(tIMU2,1*qd2,'r',tIMU2,2*gd2,'g',tIMU2,3*ad2,'b');
+  legend('quat','gyro','accel');
+end
 
-subplot(2,1,2);
-plot(tIMU2,1*qd2,'r',tIMU2,2*gd2,'g',tIMU2,3*ad2,'b'); legCell = {'quat','gyro','accel'};
-if countMyos == 1, hold on; plot(tEMG1,4*ed1,'k'); legCell{4} = 'emg'; end
-legend(legCell);
-
-  
 %% Plot Acceleration Magnitude
 % If logging from two Myos, plot the 2 norm of kinematic acceleration to
 % inspect the time-synchronization of signals. You may choose to perform
