@@ -334,6 +334,19 @@ if handles.image_pose_enabled
   end
 end
 
+% update emg data
+timeEMG = m.timeEMG_log;
+if ~isempty(timeEMG)
+  iiEMG = find(timeEMG>=(timeEMG(end)-handles.const.STRIP_TIME));
+  tEMG = timeEMG(iiEMG);
+  e = m.emg_log(iiEMG,:);
+  
+  for ii = 1:size(e,2)-1
+    set(hp.emg(ii),'xdata',tEMG,'ydata',e(:,ii));
+  end
+  set(hp.emg(end),'xdata',tEMG,'ydata',sqrt(sum(e'.^2)/8)');
+end
+
 % update axes time limits
 tmp = [...
   handles.ax_quat_strip,...
@@ -350,6 +363,9 @@ R = Rcurr;
 
 H = [R,[0;0;0];0,0,0,1];
 set(hp.hx_body,'matrix',H);
+
+set(handles.st_imu_rate,'string',sprintf('%7.3f',m.rateIMU));
+set(handles.st_emg_rate,'string',sprintf('%7.3f',m.rateEMG));
 
 drawnow;%('EXPOSE');
 
