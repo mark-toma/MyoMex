@@ -63,14 +63,14 @@ class MyoData
   std::queue<myo::Quaternion<float>,std::deque<myo::Quaternion<float>>> quat;
   std::queue<myo::Vector3<float>,std::deque<myo::Vector3<float>>> gyro;
   std::queue<myo::Vector3<float>,std::deque<myo::Vector3<float>>> accel;
+  std::queue<myo::Pose,std::deque<myo::Pose>> pose;
+  std::queue<myo::Arm,std::deque<myo::Arm>> arm;
+  std::queue<myo::XDirection,std::deque<myo::XDirection>> xDir;
   uint64_t timestampIMU;
   unsigned int countIMU;
   
   // EMG data queues and state information
   std::queue<std::array<int8_t,8>,std::deque<std::array<int8_t,8>>> emg;
-  std::queue<myo::Pose,std::deque<myo::Pose>> pose;
-  std::queue<myo::Arm,std::deque<myo::Arm>> arm;
-  std::queue<myo::XDirection,std::deque<myo::XDirection>> xDir;
   unsigned int semEMG;
   unsigned int countEMG;
   uint64_t timestampEMG;

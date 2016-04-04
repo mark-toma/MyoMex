@@ -1,5 +1,5 @@
 ###########################################################################
-# README.txt - Myo SDK MEX Wrapper MATLAB Package Guide
+# README.txt - Myo SDK MATLAB MEX Wrapper - MATLAB Package Guide
 
 Written by: Mark Tomaszewski, mark@mark-toma.com, marktoma@buffalo.edu
 
@@ -13,7 +13,19 @@ information in the help for MyoMex.
 ###########################################################################
 # CHANGELOG - Release Notes
 
-2016-xx-xx 2.1 (pre-release)
+2016-04-03 2.1
+  Minor revision update - Changed support for EMG streaming with multiple
+  Myo devices. MyoMex(1) records IMU and EMG from one device. MyoMex(2)
+  does NOT record EMG data! This results in empty matrices for timeEMG,
+  emg, and their _log properties. See the note below for more information.
+  * NOTE on EMG streaming limitations
+    Acquiring EMG data from two Myos simultaneously is impossible using the
+    standard BLED112 dongle, Myo Connect, and Myo SDK. This is due to a 
+    hard limitation in BLE bandwidth. A possible workaround for acquiring
+    EMG data from two Myos involves implementing the BLE protocol through
+    two separate Bluetooth Smart radios. Since this involves hardware
+    dependencies and (essentially) rewriting of Myo SDK code, it will not
+    be attempted in the future of this project.
   * CHANGE in myo_mex.cpp, myo_class.hpp, MyoData.m
     Myo state meta data is now sampled on the IMU time base leaving EMG
     data decoupled from all other streams, and the EMG data is not enabled
@@ -28,7 +40,6 @@ information in the help for MyoMex.
     now results in an error in myo_mex instead of an error in MyoMex after
     checking the initialization result in m-code. Changes to MyoMex were
     performed for compatibility, but the API remains unchanged.
-  * NEW FEATURE in 
   * BUGFIX in MyoMex.m, MyoData.m
     Previously, MyoData would log initial samples that weren't contiguous
     with the following time series. The MEX file myo_mex sends at most

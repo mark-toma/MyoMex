@@ -96,6 +96,7 @@ classdef MyoMex < handle
         if strcmp(emsg,'Myo failed to init!') % extra hint
           warning('Myo will fail to init if it is not connected to your system via Myo Connect.');
         end
+        this.clear_myo_mex();
         error('MEX-file ''myo_mex'' failed to initialize with error:\n\t''%s''',emsg);
       end
       
