@@ -54,7 +54,7 @@ classdef MyoMex < handle
   methods
     
     %% --- Object Management
-    function this = MyoMex(countMyos)
+    function this = MyoMex(countMyos,logDataFlag)
       % MyoMex  Construct a MyoMex object
       %
       % Inputs:
@@ -72,10 +72,13 @@ classdef MyoMex < handle
       assert(nargout==1,...
         'MyoMex must be assigned to an output variable.');
       
-      if nargin<1, countMyos = 1; end
-      
+      if nargin<1 || isempty(countMyos), countMyos = 1; end
       assert(isnumeric(countMyos) && isscalar(countMyos) && any(countMyos==[1,2]),...
         'Input countMyos must be a numeric scalar in [1,2].');
+      
+      if nargin<2, logDataFlag = false; end
+      assert(islogical(logDataFlag) && isscalar(logDataFlag),...
+        'Input logDataFlag must be a logical scalar.');
       
       % we depend on finding resources in the root directory for this class
       class_root_path = fileparts(mfilename('fullpath'));
@@ -104,6 +107,19 @@ classdef MyoMex < handle
       
       % at this point, myo_mex should be alive!
       this.nowInit = now;
+      
+      if logDataFlag
+        for ii=1:countMyos
+          fname=sprintf('MyoData_%d_IMU_%s.csv',ii,datestr(this.nowInit,'yyyy-mm-dd_HH-MM-SS'));
+          assert(~exist(fname,'file'),...
+            'Log file cannot be created because file ''%s'' already exists.',fname);
+          this.myoData(ii).logDataFidIMU=fopen(fname,'a');
+          fname=sprintf('MyoData_%d_EMG_%s.csv',ii,datestr(this.nowInit,'yyyy-mm-dd_HH-MM-SS'));
+          assert(~exist(fname,'file'),...
+            'Log file cannot be created because file ''%s'' already exists.',fname);
+          this.myoData(ii).logDataFidEMG=fopen(fname,'a');
+        end
+      end
       
       this.startStreaming();
       
