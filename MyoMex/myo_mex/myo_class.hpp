@@ -104,11 +104,11 @@ class MyoData
       timestampIMU = ts;
       // fill pose, arm, and xDir up to the new countEMG
       myo::Pose p = pose.back();
-      while ( pose.size()<countIMU ) { pose.push(p); }
+      while ( pose.size()<(countIMU-1) ) { pose.push(p); }
       myo::Arm a = arm.back();
-      while ( arm.size()<countIMU ) { arm.push(a); }
+      while ( arm.size()<(countIMU-1) ) { arm.push(a); }
       myo::XDirection x = xDir.back();
-      while ( xDir.size()<countIMU ) { xDir.push(x); }
+      while ( xDir.size()<(countIMU-1) ) { xDir.push(x); }
     }
   }
   
