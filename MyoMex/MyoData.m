@@ -515,7 +515,7 @@ classdef MyoData < handle
       e = data.emg./this.EMG_SCALE;
       
       if ~isempty(this.prevTimeEMG)
-        t = t + this.prevTimeIMU;
+        t = t + this.prevTimeEMG;
       else % init time
         t = t - t(end) + currTime;
         % chop off first P data points
