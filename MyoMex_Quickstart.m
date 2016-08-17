@@ -16,7 +16,7 @@ sdk_path = 'C:\myo-sdk-win-0.9.0'; % root path to Myo SDK
 build_myo_mex(sdk_path); % builds myo_mex
 
 %% MyoMex Usage
-% Before using |MyoMex|, you must decide how many Myos would like to use in
+% Before using |MyoMex|, you must decide how many Myos wou'd like to use in
 % this session. The MyoMex constructor argument |countMyos| specifies this
 % value. Make sure that exactly |countMyos| devices are connected in the
 % Myo Connect application or else MyoMex construction will fail. The Myo
@@ -62,6 +62,10 @@ m1.gyro
 m1.gyro_fixed
 m1.accel
 m1.accel_fixed
+
+% data properties sampled on the EMG time base
+m1.timeEMG
+m1.emg
 m1.pose
 m1.pose_rest
 m1.pose_fist
@@ -77,10 +81,6 @@ m1.xDir
 m1.xDir_wrist
 m1.xDir_elbow
 m1.xDir_unknown
-
-% data properties sampled on the EMG time base
-m1.timeEMG
-m1.emg
 
 %% Using Logged Data
 % As |MyoData| receives data from |MyoMex|, it's automatically accumulated
