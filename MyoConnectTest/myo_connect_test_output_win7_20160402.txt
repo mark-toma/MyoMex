@@ -1,0 +1,86 @@
+One Myo: (A)
+Instantiating DataCollector and Hub ...
+Registering DataCollector with Hub ...
+Getting a Myo*Running Hub ...
+myo id = 1	Myo* = 000000009CA27400
+myo id = 1	Myo* = 000000009CA27400
+myo id = 1	Myo* = 000000009CA27400
+myo id = 1	Myo* = 000000009CA27400
+myo id = 1	Myo* = 000000009CA27400
+myo id = 1	Myo* = 000000009CA27400
+myo id = 1	Myo* = 000000009CA27400
+myo id = 1	Myo* = 000000009CA27400
+myo id = 1	Myo* = 000000009CA27400
+myo id = 1	Myo* = 000000009CA27400
+myo id = 1	Myo* = 000000009CA27400
+myo id = 1	Myo* = 000000009CA27400
+myo id = 1	Myo* = 000000009CA27400
+myo id = 1	Myo* = 000000009CA27400
+myo id = 1	Myo* = 000000009CA27400
+myo id = 1	Myo* = 000000009CA27400
+myo id = 1	Myo* = 000000009CA27400
+myo id = 1	Myo* = 000000009CA27400
+myo id = 1	Myo* = 000000009CA27400
+Done!
+Exiting.
+Two Myo: (A) and (B)
+Instantiating DataCollector and Hub ...
+Registering DataCollector with Hub ...
+Getting a Myo*Running Hub ...
+myo id = 1	Myo* = 000000009C7DF440
+myo id = 2	Myo* = 000000009C7DF6E0
+myo id = 2	Myo* = 000000009C7DF6E0
+myo id = 1	Myo* = 000000009C7DF440
+myo id = 1	Myo* = 000000009C7DF440
+myo id = 1	Myo* = 000000009C7DF440
+myo id = 2	Myo* = 000000009C7DF6E0
+myo id = 2	Myo* = 000000009C7DF6E0
+myo id = 2	Myo* = 000000009C7DF6E0
+myo id = 1	Myo* = 000000009C7DF440
+myo id = 1	Myo* = 000000009C7DF440
+myo id = 1	Myo* = 000000009C7DF440
+myo id = 2	Myo* = 000000009C7DF6E0
+myo id = 2	Myo* = 000000009C7DF6E0
+myo id = 2	Myo* = 000000009C7DF6E0
+myo id = 1	Myo* = 000000009C7DF440
+myo id = 1	Myo* = 000000009C7DF440
+myo id = 1	Myo* = 000000009C7DF440
+myo id = 2	Myo* = 000000009C7DF6E0
+myo id = 2	Myo* = 000000009C7DF6E0
+myo id = 2	Myo* = 000000009C7DF6E0
+myo id = 1	Myo* = 000000009C7DF440
+myo id = 1	Myo* = 000000009C7DF440
+myo id = 1	Myo* = 000000009C7DF440
+myo id = 2	Myo* = 000000009C7DF6E0
+myo id = 2	Myo* = 000000009C7DF6E0
+myo id = 2	Myo* = 000000009C7DF6E0
+myo id = 1	Myo* = 000000009C7DF440
+myo id = 1	Myo* = 000000009C7DF440
+myo id = 1	Myo* = 000000009C7DF440
+myo id = 2	Myo* = 000000009C7DF6E0
+myo id = 2	Myo* = 000000009C7DF6E0
+myo id = 2	Myo* = 000000009C7DF6E0
+Done!
+Exiting.
+One Myo: (A)
+Instantiating DataCollector and Hub ...
+Registering DataCollector with Hub ...
+Getting a Myo*Running Hub ...
+myo id = 1	Myo* = 000000009C7DF470
+myo id = 1	Myo* = 000000009C7DF470
+myo id = 1	Myo* = 000000009C7DF470
+myo id = 1	Myo* = 000000009C7DF470
+myo id = 1	Myo* = 000000009C7DF470
+myo id = 1	Myo* = 000000009C7DF470
+myo id = 1	Myo* = 000000009C7DF470
+myo id = 1	Myo* = 000000009C7DF470
+myo id = 1	Myo* = 000000009C7DF470
+myo id = 1	Myo* = 000000009C7DF470
+myo id = 1	Myo* = 000000009C7DF470
+myo id = 1	Myo* = 000000009C7DF470
+myo id = 1	Myo* = 000000009C7DF470
+myo id = 1	Myo* = 000000009C7DF470
+myo id = 1	Myo* = 000000009C7DF470
+myo id = 1	Myo* = 000000009C7DF470
+Done!
+Exiting.

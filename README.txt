@@ -1,5 +1,5 @@
 ###########################################################################
-# README.txt - Myo SDK MATLAB MEX Wrapper - MATLAB Package Guide
+# README.txt - Myo SDK MEX Wrapper MATLAB Package Guide
 
 Written by: Mark Tomaszewski, mark@mark-toma.com, marktoma@buffalo.edu
 
@@ -13,55 +13,12 @@ information in the help for MyoMex.
 ###########################################################################
 # CHANGELOG - Release Notes
 
-2016-04-03 2.1
-  Minor revision update - Changed support for EMG streaming with multiple
-  Myo devices. MyoMex(1) records IMU and EMG from one device. MyoMex(2)
-  does NOT record EMG data! This results in empty matrices for timeEMG,
-  emg, and their _log properties. See the note below for more information.
-  * NOTE on EMG streaming limitations
-    Acquiring EMG data from two Myos simultaneously is impossible using the
-    standard BLED112 dongle, Myo Connect, and Myo SDK. This is due to a 
-    hard limitation in BLE bandwidth. A possible workaround for acquiring
-    EMG data from two Myos involves implementing the BLE protocol through
-    two separate Bluetooth Smart radios. Since this involves hardware
-    dependencies and (essentially) rewriting of Myo SDK code, it will not
-    be attempted in the future of this project.
-  * KNOWN ISSUE
-    Sometimes MyoData will not receive all expected samples. From testing,
-    it's observed that this usually occurs when using two Myos after
-    repeatedly connecting and disconnecting Myos in Myo Connect. In all
-    cases thus far, this problem has been resolved by restarting Myo 
-    Connect. Users should check the number of samples obtained against a
-    time duration (i.e. tic; dur = toc;) to verify the appriximate sample
-    rate of captured data.
-  * CHANGE in myo_mex.cpp, myo_class.hpp, MyoData.m
-    Myo state meta data is now sampled on the IMU time base leaving EMG
-    data decoupled from all other streams, and the EMG data is not enabled
-    when countMyos is greater than 1.
-  * CHANGE in MyoMex.m, MyoData.m
-    Both classes had a newDataFcn property that is a callback triggered
-    after new data is assigned to MyoData object(s). A new provate method
-    onNewData triggers the callback after MyoData.addData returns.
-  * CHANGE in myo_mex.cpp, MyoMex.m
-    Method init now takes countMyos as a second input argument instead of
-    returning it as a parameter. Failure to initialize with countMyos Myos
-    now results in an error in myo_mex instead of an error in MyoMex after
-    checking the initialization result in m-code. Changes to MyoMex were
-    performed for compatibility, but the API remains unchanged.
-  * BUGFIX in MyoMex.m, MyoData.m
-    Previously, MyoData would log initial samples that weren't contiguous
-    with the following time series. The MEX file myo_mex sends at most
-    three such samples when streaming begins (has to do with
-    synchronization mechanism implementation). Now MyoData chops these off
-    of the initial addDataXXX calls based on property NUM_INIT_SAMPLES and
-    MyoMex incorporates a corresponding start delay to ensure at least that
-    many samples are received on the initial call into myo_mex.
-
 2016-04-01 2.0
   Major update - Added support for multiple Myos and 200Hz EMG data. Every 
   file underwent substantial changes, and most of the previous API should 
   still function the same way. But there are some breaking changes. See API
   CHANGES below
+  * NEW FEATURE in 
   * UPDATED DOCS in MyoMex_Quickstart.m, README.txt
   * API CHANGES in MyoMex.m, MyoData.m
     All of the data properties that used to be in MyoMex are now in
