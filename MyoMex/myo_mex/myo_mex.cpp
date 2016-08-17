@@ -31,6 +31,7 @@ const char* output_fields[] = {"quat","gyro","accel","pose","arm","xDir","emg"};
 #define STREAMING_TIMEOUT    5
 #define INIT_DELAY        1000
 #define RESTART_DELAY      500
+#define READ_BUFFER          2
 
 // program state
 volatile bool runThreadFlag = false;
@@ -231,15 +232,15 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     mxArray *outData2[NUM_FIELDS];
     
     // Initialize output matrices for myo 1
-    szIMU1 = collector.getCountIMU(1)-1;
-    szEMG1 = collector.getCountEMG(1)-1;
+    szIMU1 = collector.getCountIMU(1)-READ_BUFFER;
+    szEMG1 = collector.getCountEMG(1)-READ_BUFFER;
     makeOutputIMU(outData1,szIMU1);
     makeOutputEMG(outData1,szEMG1);
     
     // Initialize output matrices for myo 2
     if (countMyos>1) {
-      szIMU2 = collector.getCountIMU(2)-1;
-      szEMG2 = collector.getCountEMG(2)-1;
+      szIMU2 = collector.getCountIMU(2)-READ_BUFFER;
+      szEMG2 = collector.getCountEMG(2)-READ_BUFFER;
       makeOutputIMU(outData2,szIMU2);
       makeOutputEMG(outData2,szEMG2);
     }

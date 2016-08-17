@@ -258,6 +258,11 @@ classdef MyoData < handle
     NUM_INIT_SAMPLES = 4
   end
   
+  properties (Access={?MyoMex},Hidden=true)
+    logDataFidIMU
+    logDataFidEMG
+  end
+  
   methods
     %% --- Object Management
     function this = MyoData(countMyos)
@@ -281,7 +286,13 @@ classdef MyoData < handle
     end
     
     function delete(this)
-      
+      % close log files
+      if ~isempty(this.logDataFidIMU)
+        fclose(this.logDataFidIMU);
+      end
+      if ~isempty(this.logDataFidEMG)
+        fclose(this.logDataFidEMG);
+      end
     end
     
     %% --- Setters
@@ -504,7 +515,7 @@ classdef MyoData < handle
       e = data.emg./this.EMG_SCALE;
       
       if ~isempty(this.prevTimeEMG)
-        t = t + this.prevTimeIMU;
+        t = t + this.prevTimeEMG;
       else % init time
         t = t - t(end) + currTime;
         % chop off first P data points
@@ -530,11 +541,45 @@ classdef MyoData < handle
       this.pose_log        = [ this.pose_log        ; p  ];
       this.arm_log         = [ this.arm_log         ; m  ];
       this.xDir_log        = [ this.xDir_log        ; x  ];
+      
+      fid = this.logDataFidIMU;
+      if ~isempty(fid)
+        if 0==ftell(fid)
+          % print header
+          fprintf(fid,...
+            '%s%s%s%s%s%s%s\n',...
+            't[s],',...
+            'q.w[N],q.x[N],q.y[N],q.z[N],',...
+            'gs.x[deg/s],gs.y[deg/s],gs.z[deg/s],',...
+            'gf.x[deg/s],gf.y[deg/s],gf.z[deg/s],',...
+            'as.x[g],as.y[g],as.z[g],',...
+            'af.x[g],af.y[g],af.z[g],',...
+            'pose[enum],arm[enum],xDir[enum]');
+        end
+        % print data
+        data = [t,q,g,gf,a,af,p,m,x]';
+        fprintf(fid,...
+          [repmat('%f,',[1,17]),'%d,%d,%d\n'],data);
+      end
     end
     
     function pushLogsEMG(this,t,e)
       this.timeEMG_log   = [ this.timeEMG_log ; t ];
       this.emg_log       = [ this.emg_log     ; e ];
+      
+      fid = this.logDataFidEMG;
+      if ~isempty(fid)
+        if 0==ftell(fid)
+          % print header
+          fprintf(fid,...
+            't,%se.8[N]\n',...
+            sprintf('e.%d[N],',1:7));
+        end
+        % print data
+        data = [t,e]';
+        fprintf(fid,...
+          [repmat('%f,',[1,8]),'%f\n'],data);
+      end
     end
     
     function onNewData(this)
