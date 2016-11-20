@@ -13,6 +13,9 @@
 #include "myo/myo.hpp"
 #include "myo_class.hpp"
 
+// macros
+#define MAKE_NEG_VAL_ZERO(val) (val<0)?(0):(val)
+
 // indeces of output args (into plhs[*])
 #define DATA_STRUCT_OUT_NUM    0
 
@@ -231,20 +234,25 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     mxArray *outData1[NUM_FIELDS];
     mxArray *outData2[NUM_FIELDS];
     
-    // Initialize output matrices for myo 1
+    // Compute size of output matrices
     szIMU1 = collector.getCountIMU(1)-READ_BUFFER;
-    szEMG1 = collector.getCountEMG(1)-READ_BUFFER;
-    makeOutputIMU(outData1,szIMU1);
-    makeOutputEMG(outData1,szEMG1);
-    
-    // Initialize output matrices for myo 2
-    if (countMyos>1) {
+    if (countMyos<2) {
+      szEMG1 = collector.getCountEMG(1)-READ_BUFFER;
+    } else {
       szIMU2 = collector.getCountIMU(2)-READ_BUFFER;
-      szEMG2 = collector.getCountEMG(2)-READ_BUFFER;
-      makeOutputIMU(outData2,szIMU2);
-      makeOutputEMG(outData2,szEMG2);
     }
     
+    szIMU1 = MAKE_NEG_VAL_ZERO(szIMU1);
+    szEMG1 = MAKE_NEG_VAL_ZERO(szEMG1);
+    szIMU2 = MAKE_NEG_VAL_ZERO(szIMU2);
+    szEMG2 = MAKE_NEG_VAL_ZERO(szEMG2);
+
+    // Initialize output matrices
+    makeOutputIMU(outData1,szIMU1);
+    makeOutputEMG(outData1,szEMG1);
+    makeOutputIMU(outData2,szIMU2);
+    makeOutputEMG(outData2,szEMG2);
+      
     // Now get ahold of the lock and iteratively drain the queue while
     // filling outDataN matrices
     DWORD dwWaitResult;
