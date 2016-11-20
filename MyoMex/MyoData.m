@@ -16,16 +16,13 @@ classdef MyoData < handle
   %   % Myo as they are being provided by MyoMex.
   %
   %   % Inspect the <data> properties' most recent samples
-  %   m.timeIMU % timeIMU corresponds to IMU data ONLY
+  %   m.timeIMU % timeIMU corresponds to IMU and state data below
   %   m.quat
   %   m.rot         % rotation matrix   - computed from quat
   %   m.gyro        % sensor frame gyro
   %   m.gyro_fixed  % fixed frame gyro  - computed from gyro and quat
   %   m.accel       % sensor frame accel
   %   m.accel_fixed % fixed frame accel - computed from accel and quat
-  %
-  %   m.timeEMG % corresponds to all other data listed below
-  %   m.emg
   %   m.pose        % enumerated data - logical values below
   %   m.pose_rest
   %   m.pose_fist
@@ -40,6 +37,9 @@ classdef MyoData < handle
   %   m.xDir_wrist
   %   m.xDir_elbow
   %   m.xDir_unknown
+  %
+  %   m.timeEMG % corresponds to raw EMG data ONLY!
+  %   m.emg
   %
   %   % Inspect the <data>_log properties
   %   % Just append "_log" to all of the <data> property names above. Take
