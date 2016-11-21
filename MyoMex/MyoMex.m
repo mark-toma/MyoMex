@@ -45,7 +45,6 @@ classdef MyoMex < handle
     timerStreamingData
     nowInit
     DEFAULT_STREAMING_FRAME_TIME = 0.040
-    NUM_INIT_SAMPLES = 4
   end
   
   methods
@@ -88,13 +87,20 @@ classdef MyoMex < handle
       end
       
       % call into myo_mex init
-      [fail,emsg] = this.myo_mex_init(countMyos);
+      [fail,emsg,countMyosInit] = this.myo_mex_init();
       if fail
         if strcmp(emsg,'Myo failed to init!') % extra hint
           warning('Myo will fail to init if it is not connected to your system via Myo Connect.');
         end
-        this.myo_mex_clear();
         error('MEX-file ''myo_mex'' failed to initialize with error:\n\t''%s''',emsg);
+      end
+      
+      % error out if myo_mex failed to initialize with desired countMyos
+      if countMyosInit ~= countMyos
+        this.myo_mex_delete(); % clean up myo_mex internal state
+        this.myo_mex_clear(); % clean up mex file myo_mex
+        error('MyoMex failed to initialize %d Myos. myo_mex initialized to %d Myos instead.',...
+          countMyos,countMyosInit);
       end
       
       this.myoData = MyoData(countMyos);
@@ -133,7 +139,7 @@ classdef MyoMex < handle
         'executionmode','fixedrate',...
         'name','MyoMex-timerStreamingData',...
         'period',this.DEFAULT_STREAMING_FRAME_TIME,...
-        'startdelay',this.DEFAULT_STREAMING_FRAME_TIME*this.NUM_INIT_SAMPLES,...
+        'startdelay',this.DEFAULT_STREAMING_FRAME_TIME,...
         'timerfcn',@(src,evt)this.timerStreamingDataCallback(src,evt));
       [fail,emsg] = this.myo_mex_start_streaming();
       if fail
@@ -186,12 +192,11 @@ classdef MyoMex < handle
   % the single quotes
   methods (Static=true,Access=private,Hidden=true)
     
-    function [fail,emsg] = myo_mex_init(countMyos)
-      assert( (nargin==1) && isnumeric(countMyos) && isscalar(countMyos) && any(countMyos==[1,2]),...
-        'Input countMyos must be a numeric scalar in [1,2].');
+    function [fail,emsg,data] = myo_mex_init()
       fail = false; emsg = [];
+      data = [];
       try
-        myo_mex('init',countMyos);
+        data = myo_mex('init');
       catch err
         fail = true; emsg = err.message;
       end
