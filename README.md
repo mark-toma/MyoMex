@@ -1,7 +1,7 @@
-# Myo SDK MEX Wrapper
+# Myo SDK MATLAB MEX Wrapper
 Access data from Thalmic Labs' Myo Gesture Control Armband in m-code!
 
-**Myo SDK MEX Wrapper** is also available on MathWorks' File Exchange [here](http://www.mathworks.com/matlabcentral/fileexchange/55817-myo-sdk-mex-wrapper).
+**Myo SDK MATLAB MEX Wrapper** is also available on MathWorks File Exchange [here](http://www.mathworks.com/matlabcentral/fileexchange/55817-myo-sdk-mex-wrapper).
 
 ## Description
 

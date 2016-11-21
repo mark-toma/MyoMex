@@ -33,27 +33,34 @@ classdef MyoMex < handle
   % data out of the FIFO. The timer callback then calls back into the
   % MyoMex property myoData (a MyoData object) to provide it with the
   % latest batch of samples.
-   
+  
+  properties
+    newDataFcn
+  end
   properties (SetAccess = private)
     % myo_data  Data objects for physical Myo devices
-    myoData;
+    myoData
   end
   properties (Dependent,Hidden=true)
-    currTime;
+    currTime
   end
   properties (Access=private,Hidden=true)
     timerStreamingData
     nowInit
     DEFAULT_STREAMING_FRAME_TIME = 0.040
+<<<<<<< HEAD
     NUM_INIT_SAMPLES = 4
+=======
+    NUM_INIT_SAMPLES = 5
+>>>>>>> refs/remotes/origin/master
   end
   
   methods
     
     %% --- Object Management
-    function this = MyoMex(countMyos)
+    function this = MyoMex(countMyos,logDataFlag)
       % MyoMex  Construct a MyoMex object
-      %   
+      %
       % Inputs:
       %   countMyos - Number of Myos
       %     Numerical scalar specifying the number of physical Myo devices
@@ -67,12 +74,15 @@ classdef MyoMex < handle
       %     variable throughout the lifecycle of MyoMex and then explicitly
       %     call the delete() method on the object when finished.
       assert(nargout==1,...
-        'MyoMex must be assigned to an output variable.');      
+        'MyoMex must be assigned to an output variable.');
       
-      if nargin<1, countMyos = 1; end
-      
+      if nargin<1 || isempty(countMyos), countMyos = 1; end
       assert(isnumeric(countMyos) && isscalar(countMyos) && any(countMyos==[1,2]),...
         'Input countMyos must be a numeric scalar in [1,2].');
+      
+      if nargin<2, logDataFlag = false; end
+      assert(islogical(logDataFlag) && isscalar(logDataFlag),...
+        'Input logDataFlag must be a logical scalar.');
       
       % we depend on finding resources in the root directory for this class
       class_root_path = fileparts(mfilename('fullpath'));
@@ -102,19 +112,44 @@ classdef MyoMex < handle
       % at this point, myo_mex should be alive!
       this.nowInit = now;
       
+      if logDataFlag
+        for ii=1:countMyos
+          fname=sprintf('MyoData_%d_IMU_%s.csv',ii,datestr(this.nowInit,'yyyy-mm-dd_HH-MM-SS'));
+          assert(~exist(fname,'file'),...
+            'Log file cannot be created because file ''%s'' already exists.',fname);
+          this.myoData(ii).logDataFidIMU=fopen(fname,'a');
+          fname=sprintf('MyoData_%d_EMG_%s.csv',ii,datestr(this.nowInit,'yyyy-mm-dd_HH-MM-SS'));
+          assert(~exist(fname,'file'),...
+            'Log file cannot be created because file ''%s'' already exists.',fname);
+          this.myoData(ii).logDataFidEMG=fopen(fname,'a');
+        end
+      end
+      
       this.startStreaming();
       
     end
     
     function delete(this)
       % delete  Clean up MyoMex instance of MEX function myo_mex
+      for ii = 1:length(this.myoData)
+        delete(this.myoData(ii));
+      end
       this.stopStreaming();
+      
       [fail,emsg] = MyoMex.myo_mex_delete;
       assert(~fail,...
         'myo_mex delete failed with message:\n\t''%s''',emsg);
       MyoMex.myo_mex_clear();
     end
     
+    %% --- Setters
+    function set.newDataFcn(this,val)
+      assert(isempty(val)||(isa(val,'function_handle')&&(2==nargin(val))),...
+        'Property newDataFcn must be the empty matrix when not set, or a function handles conforming to the signature newDataFcn(source,eventdata,...) when set.');
+      this.newDataFcn = val;
+    end
+    
+    %% --- Dependent Getters
     function val = get.currTime(this)
       val = (now - this.nowInit)*24*60*60;
     end
@@ -176,8 +211,13 @@ classdef MyoMex < handle
         'myo_mex get_streaming_data failed with message\n\t''%s''\n%s',emsg,...
         sprintf('MyoMex has been cleaned up and destroyed.'));
       this.myoData.addData(data,this.currTime);
+      this.onNewData();
     end
-    
+    function onNewData(this)
+      if ~isempty(this.newDataFcn)
+        this.newDataFcn(this,[]);
+      end
+    end
   end
   
   %% --- Wrappers for myo_mex Interface
