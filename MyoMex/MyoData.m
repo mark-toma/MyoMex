@@ -55,20 +55,6 @@ classdef MyoData < handle
   %
   %   % Now the MyoData objects aren't receiving new data, but you can
   %   % still use them to analyze, save, etc. the data you collected.  
-    
-  properties
-  % newDataFcn  Callback to execute when new data is received
-  %   This is either the empty matrix when not set, or a function handle
-  %   conforming to the signature newDataFcn(source,eventdata,...) when
-  %   set. If newDataFcn is set, it is called when a new frame of data is
-  %   received from MyoMex.
-  %
-  %   Input parameter source is the handle to this MyoData object, and
-  %   eventdata is currently passed the empty matrix (reserved for future
-  %   use).
-  newDataFcn
-  end
-  
   properties (SetAccess = private)
     % timeIMU  Time of sampling for IMU data
     %   This is the time at which the inertial measurement unit (IMU) data
@@ -285,12 +271,6 @@ classdef MyoData < handle
     end
     
     %% --- Setters
-    function set.newDataFcn(this,val)
-      assert(isempty(val)||(isa(val,'function_handle')&&(2==nargin(val))),...
-        'Property newDataFcn must be the empty matrix when not set, or a function handles conforming to the signature newDataFcn(source,eventdata,...) when set.');
-      this.newDataFcn = val;      
-    end
-    
     %% --- Dependent Getters
     function val = get.rateIMU(this)
       val = nan;
@@ -419,9 +399,7 @@ classdef MyoData < handle
         this(ii).addDataIMU(data(ii),currTime);
         this(ii).addDataEMG(data(ii),currTime);
       end
-      
-      this.onNewData();
-      
+                 
     end
     
   end
@@ -430,7 +408,6 @@ classdef MyoData < handle
     %% --- Internal Data Management
     function addDataIMU(this,data,currTime)
       if isempty(data.quat), return; end
-      
       N = size(data.quat,1);
       P = this.NUM_INIT_SAMPLES;
       assert( ~(isempty(this.prevTimeIMU)&&(N<P)),...
@@ -463,7 +440,7 @@ classdef MyoData < handle
         p  =  p(P+1:end,:);
         m  =  m(P+1:end,:);
         x  =  x(P+1:end,:);
-        r  =  r(:,:,P+1);
+        r  =  r(:,:,P+1:end);
       end
       
       this.prevTimeIMU = t(end);
@@ -479,8 +456,7 @@ classdef MyoData < handle
       this.arm = m(end,:);
       this.xDir = x(end,:);
       
-      if this.isStreaming, this.pushLogsIMU(t,q,r,g,gf,a,af); end
-      
+      if this.isStreaming, this.pushLogsIMU(t,q,r,g,gf,a,af,p,m,x); end
     end
     
     function addDataEMG(this,data,currTime)
@@ -507,12 +483,10 @@ classdef MyoData < handle
       
       this.timeEMG = t(end,:);
       this.emg = e(end,:);
-      
-      if this.isStreaming, this.pushLogsEMG(t,e,p,a,x); end
-      
+      if this.isStreaming, this.pushLogsEMG(t,e); end
     end
     
-    function pushLogsIMU(this,t,q,g,gf,a,af)
+    function pushLogsIMU(this,t,q,r,g,gf,a,af,p,m,x)
       this.timeIMU_log     = cat(1, this.timeIMU_log,t);
       this.quat_log        = cat(1, this.quat_log        ,q  );
       this.rot_log         = cat(3, this.rot_log         ,r  );
@@ -525,16 +499,11 @@ classdef MyoData < handle
       this.xDir_log        = cat(1, this.xDir_log        ,x  );
     end
     
-    function pushLogsEMG(this,t,e,p,a,x)
+    function pushLogsEMG(this,t,e)
       this.timeEMG_log   = [ this.timeEMG_log ; t ];
       this.emg_log       = [ this.emg_log     ; e ];
     end
-    
-    function onNewData(this)
-      if ~isempty(this.newDataFcn)
-        this.newDataFcn(this,[]);
-      end
-    end
+
   end
   
   methods (Static=true)
@@ -556,7 +525,7 @@ classdef MyoData < handle
       %   post-multiplication by the inverse of q(kk,:).
       R = zeros(3,3,size(q,1));
       for kk = 1:size(R,3)
-        s = q(1); v = q(2:4)';
+        s = q(kk,1); v = q(kk,2:4)';
         vt = [0,-v(3),v(2);v(3),0,-v(1);-v(2),v(1),0]; % cross matrix
         R(:,:,kk) = eye(3) + 2*v*v' - 2*v'*v*eye(3) + 2*s*vt;
       end
