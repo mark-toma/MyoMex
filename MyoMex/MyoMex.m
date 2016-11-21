@@ -48,7 +48,11 @@ classdef MyoMex < handle
     timerStreamingData
     nowInit
     DEFAULT_STREAMING_FRAME_TIME = 0.040
+<<<<<<< HEAD
+    NUM_INIT_SAMPLES = 4
+=======
     NUM_INIT_SAMPLES = 5
+>>>>>>> refs/remotes/origin/master
   end
   
   methods
