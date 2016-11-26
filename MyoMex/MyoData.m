@@ -414,7 +414,7 @@ classdef MyoData < handle
       isInitSample = isempty(this.prevTimeIMU);
       if isInitSample&&(N<=P) || N<1, return; end
       
-      t = (1:1:N)' * this.IMU_SAMPLE_TIME
+      t = (1:1:N)' * this.IMU_SAMPLE_TIME;
       
       q = data.quat;
       q = this.qRenorm(q); %renormalize quaterions
