@@ -268,13 +268,7 @@ classdef MyoData < handle
     end
     
     function delete(this)
-      % close log files
-      if ~isempty(this.logDataFidIMU)
-        fclose(this.logDataFidIMU);
-      end
-      if ~isempty(this.logDataFidEMG)
-        fclose(this.logDataFidEMG);
-      end
+      
     end
     
     %% --- Setters
