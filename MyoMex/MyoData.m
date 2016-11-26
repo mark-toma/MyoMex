@@ -410,12 +410,11 @@ classdef MyoData < handle
     function addDataIMU(this,data,currTime)
 
       N = size(data.quat,1);
-      if N==0, return; end
       P = this.NUM_INIT_SAMPLES;
-      assert( ~(isempty(this.prevTimeIMU)&&(N<P)),...
-        'Too few samples received in initialization of log.');
-
-      t = (1:1:N)' * this.IMU_SAMPLE_TIME;
+      isInitSample = isempty(this.prevTimeIMU);
+      if isInitSample&&(N<=P) || N<1, return; end
+      
+      t = (1:1:N)' * this.IMU_SAMPLE_TIME
       
       q = data.quat;
       q = this.qRenorm(q); %renormalize quaterions
@@ -428,7 +427,7 @@ classdef MyoData < handle
       m = data.arm;
       x = data.xDir;
       
-      if ~isempty(this.prevTimeIMU)
+      if ~isInitSample
         t = t + this.prevTimeIMU;
       else % init time
         t = t - t(end) + currTime;
@@ -463,17 +462,16 @@ classdef MyoData < handle
     end
     
     function addDataEMG(this,data,currTime)
-      N = size(data.emg,1);
 
-      if N==0, return; end
+      N = size(data.emg,1);
       P = this.NUM_INIT_SAMPLES;
-      assert( ~(isempty(this.prevTimeEMG)&&(N<P)),...
-        'Too few samples received in initialization of log.');
+      isInitSample = isempty(this.prevTimeEMG);
+      if isInitSample&&(N<=P) || N<1, return; end
       
       t = (1:1:N)' * this.EMG_SAMPLE_TIME;
       
       e = data.emg./this.EMG_SCALE;
-      if ~isempty(this.prevTimeEMG)
+      if ~isInitSample
         t = t + this.prevTimeEMG;
       else % init time
         t = t - t(end) + currTime;
