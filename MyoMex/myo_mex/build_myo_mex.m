@@ -57,7 +57,6 @@ catch err
     fprintf('\nChanging directory to original directory:\n\t''%s''\n',bld_path);
     cd(cur_path);
   end
-  fprintf('\nChanging directory to build directory:\n\t''%s''\n',bld_path);
   throw(err);
 end
 
