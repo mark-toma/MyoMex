@@ -35,7 +35,6 @@ classdef MyoMex < handle
   % latest batch of samples.
   
   properties
-    newDataFcn
   end
   properties (SetAccess = private)
     % myo_data  Data objects for physical Myo devices
@@ -114,8 +113,7 @@ classdef MyoMex < handle
       for ii = 1:length(this.myoData)
         delete(this.myoData(ii));
       end
-      
-      
+            
       [fail,emsg] = MyoMex.myo_mex_delete;
       assert(~fail,...
         'myo_mex delete failed with message:\n\t''%s''',emsg);
@@ -123,11 +121,6 @@ classdef MyoMex < handle
     end
     
     %% --- Setters
-    function set.newDataFcn(this,val)
-      assert(isempty(val)||(isa(val,'function_handle')&&(2==nargin(val))),...
-        'Property newDataFcn must be the empty matrix when not set, or a function handles conforming to the signature newDataFcn(source,eventdata,...) when set.');
-      this.newDataFcn = val;
-    end
     
     %% --- Dependent Getters
     function val = get.currTime(this)
@@ -191,12 +184,6 @@ classdef MyoMex < handle
         'myo_mex get_streaming_data failed with message\n\t''%s''\n%s',emsg,...
         sprintf('MyoMex has been cleaned up and destroyed.'));
       this.myoData.addData(data,this.currTime);
-      this.onNewData();
-    end
-    function onNewData(this)
-      if ~isempty(this.newDataFcn)
-        this.newDataFcn(this,[]);
-      end
     end
   end
   
