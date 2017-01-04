@@ -528,7 +528,8 @@ classdef MyoData < handle
       for kk = 1:size(R,3)
         s = q(kk,1); v = q(kk,2:4)';
         vt = [0,-v(3),v(2);v(3),0,-v(1);-v(2),v(1),0]; % cross matrix
-        R(:,:,kk) = eye(3) + 2*v*v' - 2*v'*v*eye(3) + 2*s*vt;
+        % R(:,:,kk) = eye(3) + 2*v*v' - 2*v'*v*eye(3) + 2*s*vt;
+        R(:,:,kk) = (s^2-2*v'*v)*eye(3) + 2*(v*v' + s*vt);
       end
     end
     function r = qRot(q,p)
