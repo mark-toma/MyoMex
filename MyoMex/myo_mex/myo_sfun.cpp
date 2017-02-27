@@ -28,7 +28,7 @@
 //      11                      arm 2
 //      12                     xDir 2
 
-#define DEBUG_MYO_SFUN
+//#define DEBUG_MYO_SFUN
 #ifdef DEBUG_MYO_SFUN
 #define DB_MYO_SFUN(fmt, ...) mexPrintf(fmt, ##__VA_ARGS__)
 #else
