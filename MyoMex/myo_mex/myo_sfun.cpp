@@ -29,10 +29,16 @@
 //      12                     xDir 2
 
 //#define DEBUG_MYO_SFUN
+//#define DEBUG_MYO_SFUN_ITER
 #ifdef DEBUG_MYO_SFUN
-#define DB_MYO_SFUN(fmt, ...) mexPrintf(fmt, ##__VA_ARGS__)
+#define DB_MYO_SFUN(fmt, ...) ssPrintf(fmt, ##__VA_ARGS__)
 #else
 #define DB_MYO_SFUN(fmt, ...)
+#endif
+#ifdef DEBUG_MYO_SFUN_ITER
+#define DB_MYO_SFUN_ITER(fmt, ...) ssPrintf(fmt, ##__VA_ARGS__)
+#else
+#define DB_MYO_SFUN_ITER(fmt, ...)
 #endif
 
 // simulink
@@ -51,36 +57,35 @@
 #define STREAMING_TIMEOUT    5
 #define INIT_DELAY 1000 // [ms] to wait for Myo
 #define BUFFER_DELAY 200 // [ms] to run for preloading buffers
-#define SAMPLE_TIME 0.005 // [s] sample time for the block
-#define MIN_BUFFER 1 // minimum IMU samples in buffer (lower failure bound)
-#define DES_BUFFER 3 // desired IMU samples in buffer (initial size)
+#define SAMPLE_TIME 0.04 // [s] sample time for the block
+#define LEN_BUFFER_MIN 3 // minimum IMU samples in buffer (lower failure bound)
+#define LEN_BUFFER_DES 5 // desired IMU samples in buffer (initial size)
 
 // threading
 unsigned int threadID;
-HANDLE hThread;
-HANDLE hMutex;
+HANDLE ghThread;
+HANDLE ghMutex;
 
 // program state
-volatile bool runThreadFlag = false;
-real_T countMyosRequired = 1;
-real_T emgEnabledRequired = 1;
+volatile bool gRunThreadFlag = false;
+real_T gCountMyosRequired = 1;
+real_T gEmgEnabledRequired = 1;
 
 // thread routine
-unsigned __stdcall runThreadFunc( void* _S ) {
-  SimStruct *S = (SimStruct *)_S;
+unsigned __stdcall runThreadFunc( void* S_ ) {
+  SimStruct *S = (SimStruct *)S_;
   myo::Hub* pHub = (myo::Hub *) ssGetPWork(S)[IDX_HUB];
-  DataCollector* pCollector = (DataCollector *) ssGetPWork(S)[IDX_COLLECTOR];
-  while ( runThreadFlag ) { // unset isStreaming to terminate thread
+  while ( gRunThreadFlag ) { // unset isStreaming to terminate thread
     // acquire lock then write data into queue
     DWORD dwWaitResult;
-    dwWaitResult = WaitForSingleObject(hMutex,INFINITE);
+    dwWaitResult = WaitForSingleObject(ghMutex,INFINITE);
     switch (dwWaitResult)
     {
       case WAIT_OBJECT_0: // The thread got ownership of the mutex
         // --- CRITICAL SECTION - holding lock
         pHub->runOnce(STREAMING_TIMEOUT); // run callbacks to collector
         // END CRITICAL SECTION - release lock
-        if (! ReleaseMutex(hMutex)) { return FALSE; } // acquired bad mutex
+        if (! ReleaseMutex(ghMutex)) { return FALSE; } // acquired bad mutex
         break;
       case WAIT_ABANDONED:
         return FALSE; // acquired bad mutex
@@ -153,27 +158,27 @@ static void mdlInitializeSizes(SimStruct *S)
 #endif
   
   // get parameters from block
-  emgEnabledRequired = *mxGetPr(ssGetSFcnParam(S,IDX_EMG_ENABLED_REQUIRED));
-  countMyosRequired = *mxGetPr(ssGetSFcnParam(S,IDX_COUNT_MYOS_REQUIRED));
+  gEmgEnabledRequired = *mxGetPr(ssGetSFcnParam(S,IDX_EMG_ENABLED_REQUIRED));
+  gCountMyosRequired = *mxGetPr(ssGetSFcnParam(S,IDX_COUNT_MYOS_REQUIRED));
   DB_MYO_SFUN("Parameter values:\n");
-  DB_MYO_SFUN("\temgEnabledRequired = %f\n",emgEnabledRequired);
-  DB_MYO_SFUN("\tcountMyosRequired  = %f\n",countMyosRequired);
+  DB_MYO_SFUN("\tgEmgEnabledRequired = %f\n",gEmgEnabledRequired);
+  DB_MYO_SFUN("\tgCountMyosRequired  = %f\n",gCountMyosRequired);
   // Determine number of output ports based on parameters
   //   This is the process parameters routine to calculate numOutputPorts
-  // countMyosRequired
-  //   |  emgEnabledRequired
+  // gCountMyosRequired
+  //   |  gEmgEnabledRequired
   //   |    |  numOutputPorts
   //   1    0    6              Default - IMU for Myo 1
   //   1    1    7              Adds EMG for Myo 1
   //   2    0    12             Adds IMU for Myo 2
   //   2    1    ERROR
-  if ((emgEnabledRequired==0.0)&&(countMyosRequired==1.0)) {
+  if ((gEmgEnabledRequired==0.0)&&(gCountMyosRequired==1.0)) {
     numOutputPorts = NUM_OUTPUT_PORTS_IMU;
-  } else if ((emgEnabledRequired==1.0)&&(countMyosRequired==1.0)) {
+  } else if ((gEmgEnabledRequired==1.0)&&(gCountMyosRequired==1.0)) {
     numOutputPorts = NUM_OUTPUT_PORTS_IMU+NUM_OUTPUT_PORTS_EMG;
-  } else if ((emgEnabledRequired==0.0)&&(countMyosRequired==2.0)) {
+  } else if ((gEmgEnabledRequired==0.0)&&(gCountMyosRequired==2.0)) {
     numOutputPorts = 2*NUM_OUTPUT_PORTS_IMU;
-  } else if ((emgEnabledRequired==1.0)&&(countMyosRequired==2.0)) {
+  } else if ((gEmgEnabledRequired==1.0)&&(gCountMyosRequired==2.0)) {
     ssSetErrorStatus(S,"EMG Cannot be enabled with more than one Myo.");
     return;
   }
@@ -188,11 +193,11 @@ static void mdlInitializeSizes(SimStruct *S)
   ssSetOutputPortWidth(S,OUTPUT_PORT_IDX_POSE,LEN_POSE);
   ssSetOutputPortWidth(S,OUTPUT_PORT_IDX_ARM,LEN_ARM);
   ssSetOutputPortWidth(S,OUTPUT_PORT_IDX_XDIR,LEN_XDIR);
-  if ((emgEnabledRequired==1.0) && (countMyosRequired==1.0)) {
+  if ((gEmgEnabledRequired==1.0) && (gCountMyosRequired==1.0)) {
     DB_MYO_SFUN("Configuring ports for Myo 1 EMG ...\n");
     // Add EMG port for Myo 1
     ssSetOutputPortWidth(S,OUTPUT_PORT_IDX_EMG,LEN_EMG);
-  } else if ((emgEnabledRequired==0.0) && (countMyosRequired==2.0)) {
+  } else if ((gEmgEnabledRequired==0.0) && (gCountMyosRequired==2.0)) {
     DB_MYO_SFUN("Configuring ports for Myo 2 IMU ...\n");
     // Add IMU ports for Myo 2
     ssSetOutputPortWidth(S,NUM_OUTPUT_PORTS_IMU+OUTPUT_PORT_IDX_QUAT,LEN_QUAT);
@@ -236,7 +241,7 @@ static void mdlStart(SimStruct *S)
   DB_MYO_SFUN("Setting up DataCollector ...\n");
   ssGetPWork(S)[IDX_COLLECTOR] = (void *) new DataCollector;
   pCollector = (DataCollector *)ssGetPWork(S)[IDX_COLLECTOR];
-  if (emgEnabledRequired==1.0)
+  if (gEmgEnabledRequired==1.0)
     pCollector->addEmgEnabled = true; // lets collector handle data events
   DB_MYO_SFUN("Setting up Hub ...\n");
   // Instantiate a Hub and get a Myo
@@ -256,16 +261,16 @@ static void mdlStart(SimStruct *S)
   }
   DB_MYO_SFUN("Setting up mutex lock ...\n");
   // instantiate mutex
-  hMutex = CreateMutex(NULL,FALSE,NULL);
-  if (hMutex == NULL) {
+  ghMutex = CreateMutex(NULL,FALSE,NULL);
+  if (ghMutex == NULL) {
     ssSetErrorStatus(S,"Failed to set up mutex.\n");
     return;
   }
   DB_MYO_SFUN("Running Hub for INIT_DELAY to validate countMyos ...\n");
   // Let Hub run callbacks on collector so we can figure out how many
-  // Myos are connected to Myo Connect so we can assert countMyosRequired
+  // Myos are connected to Myo Connect so we can assert gCountMyosRequired
   pHub->run(INIT_DELAY);
-  if (countMyosRequired != pCollector->getCountMyos()) {
+  if (gCountMyosRequired != pCollector->getCountMyos()) {
     ssSetErrorStatus(S,"myo_sfun failed to initialize with countMyos.\n");
     return;
   }
@@ -277,9 +282,9 @@ static void mdlStart(SimStruct *S)
   pHub->run(BUFFER_DELAY);
   DB_MYO_SFUN("Dispatching thread to run Hub ...\n");
   // dispatch concurrent task
-  runThreadFlag = true;
-  hThread = (HANDLE)_beginthreadex( NULL, 0, &runThreadFunc, S, 0, &threadID );
-  if ( !hThread ) {
+  gRunThreadFlag = true;
+  ghThread = (HANDLE)_beginthreadex( NULL, 0, &runThreadFunc, S, 0, &threadID );
+  if ( !ghThread ) {
     ssSetErrorStatus(S,"Failed to create streaming thread!\n");
     return;
   }
@@ -300,20 +305,20 @@ static void mdlOutputs(SimStruct *S, int_T tid)
   DataCollector* pCollector = (DataCollector *) ssGetPWork(S)[IDX_COLLECTOR];
   // get iteration counter
   int_T iter = ssGetIWork(S)[IDX_ITER];
-  int_T countIMU = pCollector->getCountIMU(1);
+  int_T countIMU1 = pCollector->getCountIMU(1);
   int_T countEMG = pCollector->getCountEMG(1);
   // fail if the queue is falling behind
-  if (countIMU < MIN_BUFFER) {
+  if (countIMU1 < LEN_BUFFER_MIN) {
     ssSetErrorStatus(S,"IMU buffer is less than minimum size.");
     return;
   }
-  if (countEMG < 4*MIN_BUFFER) {
+  if ( (gCountMyosRequired==1) && (countEMG < 4*LEN_BUFFER_MIN) ) {
     ssSetErrorStatus(S,"EMG buffer is less than minimum size");
     return;
   }
   // Verify that collector still has all of its Myos, otherwise error out
   unsigned int countMyos = pCollector->getCountMyos();
-  if ( countMyos != countMyosRequired ) {
+  if ( countMyos != gCountMyosRequired ) {
     ssSetErrorStatus(S,"myo_sfun countMyos is inconsistent with initialization... We lost a Myo!");
     return;
   }
@@ -324,7 +329,7 @@ static void mdlOutputs(SimStruct *S, int_T tid)
   // Now get ahold of the lock and iteratively drain the queue while
   // filling outDataN matrices
   DWORD dwWaitResult;
-  dwWaitResult = WaitForSingleObject(hMutex,INFINITE);
+  dwWaitResult = WaitForSingleObject(ghMutex,INFINITE);
   switch (dwWaitResult)
   {
     case WAIT_OBJECT_0: // The thread got ownership of the mutex
@@ -332,25 +337,25 @@ static void mdlOutputs(SimStruct *S, int_T tid)
       // in initial run set the buffer lengths
       if (iter==0) {
         DB_MYO_SFUN("Initializing data buffers on iteration zero ...\n");
-        while( pCollector->getCountIMU(1)>DES_BUFFER )
+        while( pCollector->getCountIMU(1)>LEN_BUFFER_DES )
           frameIMU1 = pCollector->getFrameIMU(1);
-        if(emgEnabledRequired) {
-          while( pCollector->getCountEMG(1)>4*DES_BUFFER )
+        if(gEmgEnabledRequired) {
+          while( pCollector->getCountEMG(1)>4*LEN_BUFFER_DES )
             frameEMG1 = pCollector->getFrameEMG(1);
         }
-        if (countMyosRequired==2) {
-          while( pCollector->getCountIMU(2)>DES_BUFFER )
+        if (gCountMyosRequired==2) {
+          while( pCollector->getCountIMU(2)>LEN_BUFFER_DES )
             frameIMU2 = pCollector->getFrameIMU(2);
         }
       }
       if ( isHitIMU )
         frameIMU1 = pCollector->getFrameIMU(1);
-      if ( emgEnabledRequired )
+      if ( gEmgEnabledRequired )
         frameEMG1 = pCollector->getFrameEMG(1);
-      if ( isHitIMU && (countMyosRequired==2) )
+      if ( isHitIMU && (gCountMyosRequired==2) )
         frameIMU2 = pCollector->getFrameIMU(1);
       // END CRITICAL SECTION - release lock
-      if ( !ReleaseMutex(hMutex)) {
+      if ( !ReleaseMutex(ghMutex)) {
         ssSetErrorStatus(S,"Failed to release lock\n");
         return;
       }
@@ -382,13 +387,13 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     pXDir1 = ssGetOutputPortRealSignal(S,OUTPUT_PORT_IDX_XDIR);
     pXDir1[0] = frameIMU1.xDir;
   }
-  if ( emgEnabledRequired ) {
+  if ( gEmgEnabledRequired ) {
     pEMG1 = ssGetOutputPortRealSignal(S,OUTPUT_PORT_IDX_EMG);
     ii = 0;
     for (ii;ii<8;ii++)
       pEMG1[ii] = frameEMG1.emg[ii];
   }
-  if (isHitIMU && (countMyosRequired==2) ) {
+  if (isHitIMU && (gCountMyosRequired==2) ) {
     pQuat2 = ssGetOutputPortRealSignal(S,NUM_OUTPUT_PORTS_IMU+OUTPUT_PORT_IDX_QUAT);
     pQuat2[0] = frameIMU2.quat.w();
     pQuat2[1] = frameIMU2.quat.x();
@@ -422,12 +427,12 @@ static void mdlTerminate(SimStruct *S)
   myo::Hub* pHub = (myo::Hub *) ssGetPWork(S)[IDX_HUB];
   DataCollector* pCollector = (DataCollector *) ssGetPWork(S)[IDX_COLLECTOR];
   DB_MYO_SFUN("Unsetting runThreadFlag, waiting for thread, deleting thread ...\n");
-  runThreadFlag = false; // thread sees this flag and exits
-  WaitForSingleObject( hThread, INFINITE );
-  CloseHandle( hThread );
-  hThread = NULL;
-  CloseHandle (hMutex);
-  hMutex = NULL;
+  gRunThreadFlag = false; // thread sees this flag and exits
+  WaitForSingleObject( ghThread, INFINITE );
+  CloseHandle( ghThread );
+  ghThread = NULL;
+  CloseHandle (ghMutex);
+  ghMutex = NULL;
   DB_MYO_SFUN("Deleting Hub and DataCollector ...\n");
   if (pHub!=NULL)
     delete pHub;
