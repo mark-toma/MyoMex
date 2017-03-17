@@ -56,7 +56,7 @@
 // program behavior
 #define STREAMING_TIMEOUT    5
 #define INIT_DELAY 1000 // [ms] to wait for Myo
-#define BUFFER_DELAY 200 // [ms] to run for preloading buffers
+#define BUFFER_DELAY 500 // [ms] to run for preloading buffers
 #define SAMPLE_TIME 0.04 // [s] sample time for the block
 #define LEN_BUFFER_MIN 3 // minimum IMU samples in buffer (lower failure bound)
 #define LEN_BUFFER_DES 5 // desired IMU samples in buffer (initial size)
@@ -94,6 +94,19 @@ unsigned __stdcall runThreadFunc( void* S_ ) {
   _endthreadex(0); //
   return 0;
 }
+
+void setOutputDimensionInfo(SimStruct *S, int_T port, int_T len, int_T sz)
+{
+  DECL_AND_INIT_DIMSINFO(di);
+  int_T dims[2];
+  di.numDims = 2;
+  dims[0] = sz;
+  dims[1] = len;
+  di.dims = dims;
+  di.width = sz*len;
+  ssSetOutputPortDimensionInfo(S, port, &di);
+}
+
 
 #define IS_PARAM_SCALAR_DOUBLE(pVal) ( \
 mxIsDouble(pVal) && !mxIsComplex(pVal) && \
@@ -187,25 +200,26 @@ static void mdlInitializeSizes(SimStruct *S)
   if (!ssSetNumOutputPorts(S, numOutputPorts)) return;
   // MYO 1 IMU - These ports are always hooked up
   DB_MYO_SFUN("Configuring ports for Myo 1 IMU ...\n");
-  ssSetOutputPortWidth(S,OUTPUT_PORT_IDX_QUAT,LEN_QUAT);
-  ssSetOutputPortWidth(S,OUTPUT_PORT_IDX_GYRO,LEN_GYRO);
-  ssSetOutputPortWidth(S,OUTPUT_PORT_IDX_ACCEL,LEN_ACCEL);
-  ssSetOutputPortWidth(S,OUTPUT_PORT_IDX_POSE,LEN_POSE);
-  ssSetOutputPortWidth(S,OUTPUT_PORT_IDX_ARM,LEN_ARM);
-  ssSetOutputPortWidth(S,OUTPUT_PORT_IDX_XDIR,LEN_XDIR);
+  setOutputDimensionInfo(S, OUTPUT_PORT_IDX_QUAT, LEN_QUAT, SZ_IMU);
+
+  setOutputDimensionInfo(S,OUTPUT_PORT_IDX_GYRO,LEN_GYRO, SZ_IMU);
+  setOutputDimensionInfo(S,OUTPUT_PORT_IDX_ACCEL,LEN_ACCEL, SZ_IMU);
+  setOutputDimensionInfo(S,OUTPUT_PORT_IDX_POSE,LEN_POSE, SZ_IMU);
+  setOutputDimensionInfo(S,OUTPUT_PORT_IDX_ARM,LEN_ARM, SZ_IMU);
+  setOutputDimensionInfo(S,OUTPUT_PORT_IDX_XDIR,LEN_XDIR, SZ_IMU);
   if ((gEmgEnabledRequired==1.0) && (gCountMyosRequired==1.0)) {
     DB_MYO_SFUN("Configuring ports for Myo 1 EMG ...\n");
     // Add EMG port for Myo 1
-    ssSetOutputPortWidth(S,OUTPUT_PORT_IDX_EMG,LEN_EMG);
+    setOutputDimensionInfo(S,OUTPUT_PORT_IDX_EMG,LEN_EMG,SZ_EMG);
   } else if ((gEmgEnabledRequired==0.0) && (gCountMyosRequired==2.0)) {
     DB_MYO_SFUN("Configuring ports for Myo 2 IMU ...\n");
     // Add IMU ports for Myo 2
-    ssSetOutputPortWidth(S,NUM_OUTPUT_PORTS_IMU+OUTPUT_PORT_IDX_QUAT,LEN_QUAT);
-    ssSetOutputPortWidth(S,NUM_OUTPUT_PORTS_IMU+OUTPUT_PORT_IDX_GYRO,LEN_GYRO);
-    ssSetOutputPortWidth(S,NUM_OUTPUT_PORTS_IMU+OUTPUT_PORT_IDX_ACCEL,LEN_ACCEL);
-    ssSetOutputPortWidth(S,NUM_OUTPUT_PORTS_IMU+OUTPUT_PORT_IDX_POSE,LEN_POSE);
-    ssSetOutputPortWidth(S,NUM_OUTPUT_PORTS_IMU+OUTPUT_PORT_IDX_ARM,LEN_ARM);
-    ssSetOutputPortWidth(S,NUM_OUTPUT_PORTS_IMU+OUTPUT_PORT_IDX_XDIR,LEN_XDIR);
+    setOutputDimensionInfo(S,NUM_OUTPUT_PORTS_IMU+OUTPUT_PORT_IDX_QUAT,LEN_QUAT, SZ_IMU);
+    setOutputDimensionInfo(S,NUM_OUTPUT_PORTS_IMU+OUTPUT_PORT_IDX_GYRO,LEN_GYRO, SZ_IMU);
+    setOutputDimensionInfo(S,NUM_OUTPUT_PORTS_IMU+OUTPUT_PORT_IDX_ACCEL,LEN_ACCEL, SZ_IMU);
+    setOutputDimensionInfo(S,NUM_OUTPUT_PORTS_IMU+OUTPUT_PORT_IDX_POSE,LEN_POSE, SZ_IMU);
+    setOutputDimensionInfo(S,NUM_OUTPUT_PORTS_IMU+OUTPUT_PORT_IDX_ARM,LEN_ARM, SZ_IMU);
+    setOutputDimensionInfo(S,NUM_OUTPUT_PORTS_IMU+OUTPUT_PORT_IDX_XDIR,LEN_XDIR, SZ_IMU);
   }
   ssSetNumSampleTimes(    S, 1);
   ssSetNumRWork(          S, 0);   /* number of real work vector elements   */
@@ -223,7 +237,6 @@ static void mdlInitializeSampleTimes(SimStruct *S)
   DB_MYO_SFUN("ENTER mdlInitializeSampleTimes\n");
   ssSetSampleTime(S, 0, SAMPLE_TIME);
   ssSetOffsetTime(S, 0, 0.0);
-  ssSetModelReferenceSampleTimeDefaultInheritance(S);
   DB_MYO_SFUN("EXIT  mdlInitializeSampleTimes()\n");
 } /* end mdlInitializeSampleTimes */
 
@@ -296,7 +309,7 @@ static void mdlStart(SimStruct *S)
 static void mdlOutputs(SimStruct *S, int_T tid)
 {
   DB_MYO_SFUN("ENTER mdlOutputs()\n");
-  int_T ii;
+  int_T ii, jj;
   real_T *pQuat1, *pGyro1, *pAccel1, *pPose1, *pArm1, *pXDir1;
   real_T *pQuat2, *pGyro2, *pAccel2, *pPose2, *pArm2, *pXDir2;
   real_T *pEMG1;
@@ -306,13 +319,22 @@ static void mdlOutputs(SimStruct *S, int_T tid)
   // get iteration counter
   int_T iter = ssGetIWork(S)[IDX_ITER];
   int_T countIMU1 = pCollector->getCountIMU(1);
+  
+  int_T countIMU2;
+  if (gCountMyosRequired==2)
+    countIMU2 = pCollector->getCountIMU(1);
   int_T countEMG = pCollector->getCountEMG(1);
   // fail if the queue is falling behind
   if (countIMU1 < LEN_BUFFER_MIN) {
-    ssSetErrorStatus(S,"IMU buffer is less than minimum size.");
+    ssSetErrorStatus(S,"IMU1 buffer is less than minimum size.");
+    return;
+  }
+  if ( (gCountMyosRequired==2) && (countIMU2 < LEN_BUFFER_MIN) ) {
+    ssSetErrorStatus(S,"IMU2 buffer is less than minimum size.");
     return;
   }
   if ( (gCountMyosRequired==1) && (countEMG < 4*LEN_BUFFER_MIN) ) {
+    ssPrintf("EMG Buffer is %d samples.\n",countEMG);
     ssSetErrorStatus(S,"EMG buffer is less than minimum size");
     return;
   }
@@ -322,9 +344,8 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     ssSetErrorStatus(S,"myo_sfun countMyos is inconsistent with initialization... We lost a Myo!");
     return;
   }
-  FrameIMU frameIMU1, frameIMU2; // Data structures returned from queue read
-  FrameEMG frameEMG1;
-  bool isHitIMU = (0==(iter % 4));
+  FrameIMU frameIMU1[2], frameIMU2[2]; // Data structures returned from queue read
+  FrameEMG frameEMG1[8];
   
   // Now get ahold of the lock and iteratively drain the queue while
   // filling outDataN matrices
@@ -338,22 +359,28 @@ static void mdlOutputs(SimStruct *S, int_T tid)
       if (iter==0) {
         DB_MYO_SFUN("Initializing data buffers on iteration zero ...\n");
         while( pCollector->getCountIMU(1)>LEN_BUFFER_DES )
-          frameIMU1 = pCollector->getFrameIMU(1);
+          *frameIMU1 = pCollector->getFrameIMU(1);
         if(gEmgEnabledRequired) {
           while( pCollector->getCountEMG(1)>4*LEN_BUFFER_DES )
-            frameEMG1 = pCollector->getFrameEMG(1);
+            *frameEMG1 = pCollector->getFrameEMG(1);
         }
         if (gCountMyosRequired==2) {
           while( pCollector->getCountIMU(2)>LEN_BUFFER_DES )
-            frameIMU2 = pCollector->getFrameIMU(2);
+            *frameIMU2 = pCollector->getFrameIMU(2);
         }
       }
-      if ( isHitIMU )
-        frameIMU1 = pCollector->getFrameIMU(1);
-      if ( gEmgEnabledRequired )
-        frameEMG1 = pCollector->getFrameEMG(1);
-      if ( isHitIMU && (gCountMyosRequired==2) )
-        frameIMU2 = pCollector->getFrameIMU(1);
+      frameIMU1[0] = pCollector->getFrameIMU(1);
+      frameIMU1[1] = pCollector->getFrameIMU(1);
+      
+      if ( gEmgEnabledRequired ) {
+        for (ii=0;ii<8;ii++) {
+          frameEMG1[ii] = pCollector->getFrameEMG(1);
+        }
+      }
+      if (gCountMyosRequired==2) {
+        frameIMU2[0] = pCollector->getFrameIMU(2);
+        frameIMU2[1] = pCollector->getFrameIMU(2);
+      }
       // END CRITICAL SECTION - release lock
       if ( !ReleaseMutex(ghMutex)) {
         ssSetErrorStatus(S,"Failed to release lock\n");
@@ -366,53 +393,81 @@ static void mdlOutputs(SimStruct *S, int_T tid)
       break;
   }
   
-  if ( isHitIMU ) {
     pQuat1 = ssGetOutputPortRealSignal(S,OUTPUT_PORT_IDX_QUAT);
-    pQuat1[0] = frameIMU1.quat.w();
-    pQuat1[1] = frameIMU1.quat.x();
-    pQuat1[1] = frameIMU1.quat.y();
-    pQuat1[3] = frameIMU1.quat.z();
+    pQuat1[0] = frameIMU1[0].quat.w();
+    pQuat1[1] = frameIMU1[1].quat.w();
+    pQuat1[2] = frameIMU1[0].quat.x();
+    pQuat1[3] = frameIMU1[1].quat.x();
+    pQuat1[4] = frameIMU1[0].quat.y();
+    pQuat1[5] = frameIMU1[1].quat.y();
+    pQuat1[6] = frameIMU1[0].quat.z();
+    pQuat1[7] = frameIMU1[1].quat.z();
     pGyro1 = ssGetOutputPortRealSignal(S,OUTPUT_PORT_IDX_GYRO);
-    pGyro1[0] = frameIMU1.gyro.x();
-    pGyro1[1] = frameIMU1.gyro.y();
-    pGyro1[2] = frameIMU1.gyro.z();
+    pGyro1[0] = frameIMU1[0].gyro.x();
+    pGyro1[1] = frameIMU1[1].gyro.x();
+    pGyro1[2] = frameIMU1[0].gyro.y();
+    pGyro1[3] = frameIMU1[1].gyro.y();
+    pGyro1[4] = frameIMU1[0].gyro.z();
+    pGyro1[5] = frameIMU1[1].gyro.z();
     pAccel1 = ssGetOutputPortRealSignal(S,OUTPUT_PORT_IDX_ACCEL);
-    pAccel1[0] = frameIMU1.accel.x();
-    pAccel1[1] = frameIMU1.accel.y();
-    pAccel1[2] = frameIMU1.accel.z();
+    pAccel1[0] = frameIMU1[0].accel.x();
+    pAccel1[1] = frameIMU1[1].accel.x();
+    pAccel1[2] = frameIMU1[0].accel.y();
+    pAccel1[3] = frameIMU1[1].accel.y();
+    pAccel1[4] = frameIMU1[0].accel.z();
+    pAccel1[5] = frameIMU1[1].accel.z();
     pPose1 = ssGetOutputPortRealSignal(S,OUTPUT_PORT_IDX_POSE);
-    pPose1[0] = frameIMU1.pose.type();
+    pPose1[0] = frameIMU1[0].pose.type();
+    pPose1[1] = frameIMU1[1].pose.type();
     pArm1 = ssGetOutputPortRealSignal(S,OUTPUT_PORT_IDX_ARM);
-    pArm1[0] = frameIMU1.arm;
+    pArm1[0] = frameIMU1[0].arm;
+    pArm1[1] = frameIMU1[1].arm;
     pXDir1 = ssGetOutputPortRealSignal(S,OUTPUT_PORT_IDX_XDIR);
-    pXDir1[0] = frameIMU1.xDir;
-  }
+    pXDir1[0] = frameIMU1[0].xDir;
+    pXDir1[1] = frameIMU1[1].xDir;
+  
   if ( gEmgEnabledRequired ) {
     pEMG1 = ssGetOutputPortRealSignal(S,OUTPUT_PORT_IDX_EMG);
-    ii = 0;
-    for (ii;ii<8;ii++)
-      pEMG1[ii] = frameEMG1.emg[ii];
+    ii = 0; jj = 0;
+    for (ii;ii<8;ii++) {
+      for (jj;jj<8;jj++) {
+        pEMG1[ii+8*jj] = frameEMG1[ii].emg[jj];
+      }
+    }
   }
-  if (isHitIMU && (gCountMyosRequired==2) ) {
+  if (gCountMyosRequired==2) {
     pQuat2 = ssGetOutputPortRealSignal(S,NUM_OUTPUT_PORTS_IMU+OUTPUT_PORT_IDX_QUAT);
-    pQuat2[0] = frameIMU2.quat.w();
-    pQuat2[1] = frameIMU2.quat.x();
-    pQuat2[1] = frameIMU2.quat.y();
-    pQuat2[3] = frameIMU2.quat.z();
+    pQuat2[0] = frameIMU2[0].quat.w();
+    pQuat2[1] = frameIMU2[1].quat.w();
+    pQuat2[2] = frameIMU2[0].quat.x();
+    pQuat2[3] = frameIMU2[1].quat.x();
+    pQuat2[4] = frameIMU2[0].quat.y();
+    pQuat2[5] = frameIMU2[1].quat.y();
+    pQuat2[6] = frameIMU2[0].quat.z();
+    pQuat2[7] = frameIMU2[1].quat.z();
     pGyro2 = ssGetOutputPortRealSignal(S,NUM_OUTPUT_PORTS_IMU+OUTPUT_PORT_IDX_GYRO);
-    pGyro2[0] = frameIMU2.gyro.x();
-    pGyro2[1] = frameIMU2.gyro.y();
-    pGyro2[2] = frameIMU2.gyro.z();
+    pGyro2[0] = frameIMU2[0].gyro.x();
+    pGyro2[1] = frameIMU2[1].gyro.x();
+    pGyro2[2] = frameIMU2[0].gyro.y();
+    pGyro2[3] = frameIMU2[1].gyro.y();
+    pGyro2[4] = frameIMU2[0].gyro.z();
+    pGyro2[5] = frameIMU2[1].gyro.z();
     pAccel2 = ssGetOutputPortRealSignal(S,NUM_OUTPUT_PORTS_IMU+OUTPUT_PORT_IDX_ACCEL);
-    pAccel2[0] = frameIMU2.accel.x();
-    pAccel2[1] = frameIMU2.accel.y();
-    pAccel2[2] = frameIMU2.accel.z();
+    pAccel2[0] = frameIMU2[0].accel.x();
+    pAccel2[1] = frameIMU2[1].accel.x();
+    pAccel2[2] = frameIMU2[0].accel.y();
+    pAccel2[3] = frameIMU2[1].accel.y();
+    pAccel2[4] = frameIMU2[0].accel.z();
+    pAccel2[5] = frameIMU2[1].accel.z();
     pPose2 = ssGetOutputPortRealSignal(S,NUM_OUTPUT_PORTS_IMU+OUTPUT_PORT_IDX_POSE);
-    pPose2[0] = frameIMU2.pose.type();
+    pPose2[0] = frameIMU2[0].pose.type();
+    pPose2[1] = frameIMU2[1].pose.type();
     pArm2 = ssGetOutputPortRealSignal(S,NUM_OUTPUT_PORTS_IMU+OUTPUT_PORT_IDX_ARM);
-    pArm2[0] = frameIMU2.arm;
+    pArm2[0] = frameIMU2[0].arm;
+    pArm2[1] = frameIMU2[1].arm;
     pXDir2 = ssGetOutputPortRealSignal(S,NUM_OUTPUT_PORTS_IMU+OUTPUT_PORT_IDX_XDIR);
-    pXDir2[0] = frameIMU2.xDir;
+    pXDir2[0] = frameIMU2[0].xDir;
+    pXDir2[1] = frameIMU2[1].xDir;
   }
   // increment and store new iteration value
   ssGetIWork(S)[IDX_ITER] = ++iter;
