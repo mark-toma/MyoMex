@@ -1,9 +1,15 @@
 // myo_sfun_wiring.h
-#ifndef _MYO_SFUN_WIRING_
-#define _MYO_SFUN_WIRING_
+#ifndef MYO_SFUN_WIRING
+#define MYO_SFUN_WIRING
 
+
+// ==================================================
+// Inputs
 #define NUM_INPUT_PORTS 0
 
+
+// ==================================================
+// Outputs
 #define OUTPUT_PORT_IDX_QUAT  0
 #define OUTPUT_PORT_IDX_GYRO  1
 #define OUTPUT_PORT_IDX_ACCEL 2
@@ -24,16 +30,22 @@
 #define SZ_IMU 2
 #define SZ_EMG 8
 
-#define IDX_HUB 0
-#define IDX_COLLECTOR 1
-#define NUM_PWORK 2
 
-#define IDX_ITER 0
-#define IDX_COUNT_MYOS_REQUIRED 1
-#define NUM_IWORK 2
-
+// ==================================================
+// Parameters
 #define IDX_EMG_ENABLED_REQUIRED 0
 #define IDX_COUNT_MYOS_REQUIRED 1
 #define NUM_SFCN_PARAMS 2
 
-#endif // _MYO_SFUN_WIRING_
+
+// ==================================================
+// Work Vectors
+#define IDX_HUB       0
+#define IDX_COLLECTOR 1
+#define NUM_PWORK     2
+
+#define IDX_ITER  0
+#define NUM_IWORK 1
+
+
+#endif // MYO_SFUN_WIRING
