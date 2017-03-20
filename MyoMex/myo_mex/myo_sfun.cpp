@@ -1,33 +1,3 @@
-
-
-
-
-//    INPUTS         myo_sfun         OUTPUTS
-//            +--------------------+
-//            |           / quat ->+--(1x4 double)-->
-//            |          |  gyro ->+--(1x3 double)-->
-//            |          | accel ->+--(1x3 double)-->
-//            |   Myo 1 -|  pose ->+--(1x1 double)-->
-//            |          |   arm ->+--(1x1 double)-->
-//            |          |  xDir ->+--(1x1 double)-->
-//            |           \  emg ->+--(1x8 double)-->
-//            +--------------------+
-//
-//            1 MYO    1 MYO    2 MYO   2 MYO
-// OUTPORT  EMG OFF   EMG ON  EMG OFF  EMG ON
-//       1   quat 1   quat 1   quat 1       E
-//       2   gyro 1   gyro 1   gyro 1       R
-//       3  accel 1  accel 1  accel 1       R
-//       4   pose 1   pose 1   pose 1       O
-//       5    arm 1    arm 1    arm 1       R
-//       6   xDir 1   xDir 1   xDir 1
-//       7             emg 1   quat 2
-//       8                     gyro 2
-//       9                    accel 2
-//      10                     pose 2
-//      11                      arm 2
-//      12                     xDir 2
-
 //#define DEBUG_MYO_SFUN
 //#define DEBUG_MYO_SFUN_ITER
 #ifdef DEBUG_MYO_SFUN
@@ -40,6 +10,11 @@
 #else
 #define DB_MYO_SFUN_ITER(fmt, ...)
 #endif
+
+// configuration
+#define BUFFER_FRAMES_DES 25 // initial size of data buffer in frames
+                             // the frame rate is 25Hz so this default
+                             // value 25 results in 1s latency
 
 // simulink
 #define S_FUNCTION_NAME  myo_sfun
@@ -56,8 +31,6 @@
 // program behavior
 #define STREAMING_TIMEOUT 5
 #define INIT_DELAY 1000 // [ms] to wait for Myo
-
-#define BUFFER_FRAMES_DES 25 // user-specified
 
 #define BUFFER_FRAMES_MIN 1
 #define SAMPLE_TIME_BLK 40  // [ms] sample time for the block
