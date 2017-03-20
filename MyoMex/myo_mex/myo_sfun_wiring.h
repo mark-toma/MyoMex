@@ -21,7 +21,8 @@
 #define LEN_ARM   1
 #define LEN_XDIR  1
 #define LEN_EMG   8
-
+#define SZ_IMU 2
+#define SZ_EMG 8
 
 #define IDX_HUB 0
 #define IDX_COLLECTOR 1
