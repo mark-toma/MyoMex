@@ -1,56 +1,33 @@
-//#define DEBUG_MYO_SFUN
-//#define DEBUG_MYO_SFUN_ITER
-#ifdef DEBUG_MYO_SFUN
-#define DB_MYO_SFUN(fmt, ...) ssPrintf(fmt, ##__VA_ARGS__)
-#else
-#define DB_MYO_SFUN(fmt, ...)
-#endif
-#ifdef DEBUG_MYO_SFUN_ITER
-#define DB_MYO_SFUN_ITER(fmt, ...) ssPrintf(fmt, ##__VA_ARGS__)
-#else
-#define DB_MYO_SFUN_ITER(fmt, ...)
-#endif
-
-// configuration
-#define BUFFER_FRAMES_DES 25 // initial size of data buffer in frames
-                             // the frame rate is 25Hz so this default
-                             // value 25 results in 1s latency
-
-// simulink
+// myo_sfun.cpp
+// 
 #define S_FUNCTION_NAME  myo_sfun
 #define S_FUNCTION_LEVEL 2
 #include "simstruc.h"
 
-// myo impl
+#include "myo_sfun.h"        // macros and defines for general behavior
+#include "myo_sfun_wiring.h" // macros and defines for sfcn block and data
+
+#include "myo/myo.hpp"   // Myo SDK bindings
+#include "myo_class.hpp" // application class for Myo implementation
+
 #include <windows.h>      // win api for threading support
 #include <process.h>      // process/thread support
-#include "myo/myo.hpp"
-#include "myo_class.hpp"
-#include "myo_sfun_wiring.h"
 
-// program behavior
-#define STREAMING_TIMEOUT 5
-#define INIT_DELAY 1000 // [ms] to wait for Myo
 
-#define BUFFER_FRAMES_MIN 1
-#define SAMPLE_TIME_BLK 40  // [ms] sample time for the block
-#define SAMPLE_TIME_IMU 20  // [ms]  50Hz
-#define SAMPLE_TIME_EMG  5  // [ms] 200Hz
-#define SAMPLES_PER_FRAME_IMU SAMPLE_TIME_BLK/SAMPLE_TIME_IMU
-#define SAMPLES_PER_FRAME_EMG SAMPLE_TIME_BLK/SAMPLE_TIME_EMG
-#define BUFFER_DELAY ((1+BUFFER_FRAMES_DES)*SAMPLE_TIME_BLK)
-
-// threading
+// ==================================================
+// Global variables
 unsigned int threadID;
 HANDLE ghThread;
 HANDLE ghMutex;
-
-// program state
 volatile bool gRunThreadFlag = false;
 real_T gCountMyosRequired = 1;
 real_T gEmgEnabledRequired = 1;
 
-// thread routine
+
+// ==================================================
+// Thread function
+//   This thread calls myo::Hub::runOnce() for the
+//   lifetime of the application
 unsigned __stdcall runThreadFunc( void* S_ ) {
   SimStruct *S = (SimStruct *)S_;
   myo::Hub* pHub = (myo::Hub *) ssGetPWork(S)[IDX_HUB];
@@ -74,7 +51,10 @@ unsigned __stdcall runThreadFunc( void* S_ ) {
   return 0;
 }
 
-// Configures output port with 2D size
+
+// ==================================================
+// Utility functions
+//   User defined functions for convenience
 static void setOutputDimensionInfo(SimStruct *S, int_T port, int_T len, int_T sz)
 {
   DECL_AND_INIT_DIMSINFO(di);
@@ -88,11 +68,8 @@ static void setOutputDimensionInfo(SimStruct *S, int_T port, int_T len, int_T sz
 }
 
 
-#define IS_PARAM_SCALAR_DOUBLE(pVal) ( \
-mxIsDouble(pVal) && !mxIsComplex(pVal) && \
-        (mxGetNumberOfDimensions(pVal)==2) && \
-        (mxGetM(pVal)==1 && mxGetN(pVal)==1))
-        
+// ==================================================
+// Model callback functions
 #define MDL_CHECK_PARAMETERS   /* Change to #undef to remove function */
 #if defined(MDL_CHECK_PARAMETERS) && defined(MATLAB_MEX_FILE)
         static void mdlCheckParameters(SimStruct *S)
@@ -206,6 +183,7 @@ static void mdlInitializeSizes(SimStruct *S)
   ssSetOptions(          S, 0);   /* general options (SS_OPTION_xx)        */
   DB_MYO_SFUN("EXIT  mdlInitializeSizes\n");
 } /* end mdlInitializeSizes */
+
 
 static void mdlInitializeSampleTimes(SimStruct *S)
 {
