@@ -62,5 +62,5 @@ Your user folder (and your username is "AliceAndBob")
 C:\Users\AliceAndBob\myo-sdk-win-0.9.0\bin\
 ```
 
-Now you've determined the absolute path to the Myo SDK bin directory, you must append this path to the value of the `PATH` environment variable in Windows. You can follow [this tutorial](http://www.computerhope.com/issues/ch000549.htm) to learn of to add this path to `PATH` in your version of Windows. A special thanks goes out to C. Spiewak for providing this link in the comments [here](http://www.mathworks.com/matlabcentral/fileexchange/55817-myo-sdk-matlab-mex-wrapper).
+Now you've determined the absolute path to the Myo SDK bin directory, you must append this path to the value of the `PATH` environment variable in Windows. You can follow [this tutorial](http://www.computerhope.com/issues/ch000549.htm) to learn how to add this path to `PATH` in your version of Windows. A special thanks goes out to C. Spiewak for providing this link in the comments [here](http://www.mathworks.com/matlabcentral/fileexchange/55817-myo-sdk-matlab-mex-wrapper).
 
