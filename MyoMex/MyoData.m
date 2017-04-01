@@ -268,13 +268,7 @@ classdef MyoData < handle
     end
     
     function delete(this)
-      % close log files
-      if ~isempty(this.logDataFidIMU)
-        fclose(this.logDataFidIMU);
-      end
-      if ~isempty(this.logDataFidEMG)
-        fclose(this.logDataFidEMG);
-      end
+      
     end
     
     %% --- Setters
@@ -416,11 +410,10 @@ classdef MyoData < handle
     function addDataIMU(this,data,currTime)
 
       N = size(data.quat,1);
-      if N==0, return; end
       P = this.NUM_INIT_SAMPLES;
-      assert( ~(isempty(this.prevTimeIMU)&&(N<P)),...
-        'Too few samples received in initialization of log.');
-
+      isInitSample = isempty(this.prevTimeIMU);
+      if isInitSample&&(N<=P) || N<1, return; end
+      
       t = (1:1:N)' * this.IMU_SAMPLE_TIME;
       
       q = data.quat;
@@ -434,7 +427,7 @@ classdef MyoData < handle
       m = data.arm;
       x = data.xDir;
       
-      if ~isempty(this.prevTimeIMU)
+      if ~isInitSample
         t = t + this.prevTimeIMU;
       else % init time
         t = t - t(end) + currTime;
@@ -469,17 +462,16 @@ classdef MyoData < handle
     end
     
     function addDataEMG(this,data,currTime)
-      N = size(data.emg,1);
 
-      if N==0, return; end
+      N = size(data.emg,1);
       P = this.NUM_INIT_SAMPLES;
-      assert( ~(isempty(this.prevTimeEMG)&&(N<P)),...
-        'Too few samples received in initialization of log.');
+      isInitSample = isempty(this.prevTimeEMG);
+      if isInitSample&&(N<=P) || N<1, return; end
       
       t = (1:1:N)' * this.EMG_SAMPLE_TIME;
       
       e = data.emg./this.EMG_SCALE;
-      if ~isempty(this.prevTimeEMG)
+      if ~isInitSample
         t = t + this.prevTimeEMG;
       else % init time
         t = t - t(end) + currTime;
@@ -536,7 +528,8 @@ classdef MyoData < handle
       for kk = 1:size(R,3)
         s = q(kk,1); v = q(kk,2:4)';
         vt = [0,-v(3),v(2);v(3),0,-v(1);-v(2),v(1),0]; % cross matrix
-        R(:,:,kk) = eye(3) + 2*v*v' - 2*v'*v*eye(3) + 2*s*vt;
+         R(:,:,kk) = eye(3) + 2*v*v' - 2*v'*v*eye(3) + 2*s*vt;
+        %R(:,:,kk) = (s^2-2*v'*v)*eye(3) + 2*(v*v' + s*vt);
       end
     end
     function r = qRot(q,p)

@@ -1,0 +1,20 @@
+#VRML V2.0 utf8
+
+DEF Offset Transform {
+  children DEF Myo Transform {
+    translation 200 0 0
+    children [
+      Inline {
+        url "../resources/myo_armband_asm_v97.wrl" 
+      }
+      Sphere {
+        radius 5
+      }
+      Transform {
+        children Sphere {
+          radius 5
+        }
+      }
+    ]
+  }
+}

@@ -6,3 +6,5 @@
 # Development files
 *_devel*
 *.db
+*.log
+*.bak

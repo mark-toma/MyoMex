@@ -35,7 +35,6 @@ classdef MyoMex < handle
   % latest batch of samples.
   
   properties
-    newDataFcn
   end
   properties (SetAccess = private)
     % myo_data  Data objects for physical Myo devices
@@ -54,7 +53,7 @@ classdef MyoMex < handle
   methods
     
     %% --- Object Management
-    function this = MyoMex(countMyos,logDataFlag)
+    function this = MyoMex(countMyos)
       % MyoMex  Construct a MyoMex object
       %
       % Inputs:
@@ -75,10 +74,6 @@ classdef MyoMex < handle
       if nargin<1 || isempty(countMyos), countMyos = 1; end
       assert(isnumeric(countMyos) && isscalar(countMyos) && any(countMyos==[1,2]),...
         'Input countMyos must be a numeric scalar in [1,2].');
-      
-      if nargin<2, logDataFlag = false; end
-      assert(islogical(logDataFlag) && isscalar(logDataFlag),...
-        'Input logDataFlag must be a logical scalar.');
       
       % we depend on finding resources in the root directory for this class
       class_root_path = fileparts(mfilename('fullpath'));
@@ -108,30 +103,17 @@ classdef MyoMex < handle
       % at this point, myo_mex should be alive!
       this.nowInit = now;
       
-      if logDataFlag
-        for ii=1:countMyos
-          fname=sprintf('MyoData_%d_IMU_%s.csv',ii,datestr(this.nowInit,'yyyy-mm-dd_HH-MM-SS'));
-          assert(~exist(fname,'file'),...
-            'Log file cannot be created because file ''%s'' already exists.',fname);
-          this.myoData(ii).logDataFidIMU=fopen(fname,'a');
-          fname=sprintf('MyoData_%d_EMG_%s.csv',ii,datestr(this.nowInit,'yyyy-mm-dd_HH-MM-SS'));
-          assert(~exist(fname,'file'),...
-            'Log file cannot be created because file ''%s'' already exists.',fname);
-          this.myoData(ii).logDataFidEMG=fopen(fname,'a');
-        end
-      end
-      
       this.startStreaming();
       
     end
     
     function delete(this)
       % delete  Clean up MyoMex instance of MEX function myo_mex
+      this.stopStreaming();
       for ii = 1:length(this.myoData)
         delete(this.myoData(ii));
       end
-      this.stopStreaming();
-      
+            
       [fail,emsg] = MyoMex.myo_mex_delete;
       assert(~fail,...
         'myo_mex delete failed with message:\n\t''%s''',emsg);
@@ -139,11 +121,6 @@ classdef MyoMex < handle
     end
     
     %% --- Setters
-    function set.newDataFcn(this,val)
-      assert(isempty(val)||(isa(val,'function_handle')&&(2==nargin(val))),...
-        'Property newDataFcn must be the empty matrix when not set, or a function handles conforming to the signature newDataFcn(source,eventdata,...) when set.');
-      this.newDataFcn = val;
-    end
     
     %% --- Dependent Getters
     function val = get.currTime(this)
@@ -207,12 +184,6 @@ classdef MyoMex < handle
         'myo_mex get_streaming_data failed with message\n\t''%s''\n%s',emsg,...
         sprintf('MyoMex has been cleaned up and destroyed.'));
       this.myoData.addData(data,this.currTime);
-      this.onNewData();
-    end
-    function onNewData(this)
-      if ~isempty(this.newDataFcn)
-        this.newDataFcn(this,[]);
-      end
     end
   end
   
