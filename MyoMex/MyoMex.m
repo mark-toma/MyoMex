@@ -35,6 +35,7 @@ classdef MyoMex < handle
   % latest batch of samples.
   
   properties
+    deleteFcn = []
   end
   properties (SetAccess = private)
     % myo_data  Data objects for physical Myo devices
@@ -48,6 +49,7 @@ classdef MyoMex < handle
     nowInit
     DEFAULT_STREAMING_FRAME_TIME = 0.040
     NUM_INIT_SAMPLES = 4
+    fatalErrorSource
   end
   
   methods
@@ -109,11 +111,12 @@ classdef MyoMex < handle
     
     function delete(this)
       % delete  Clean up MyoMex instance of MEX function myo_mex
+      this.onDelete();
       this.stopStreaming();
       for ii = 1:length(this.myoData)
         delete(this.myoData(ii));
       end
-            
+      
       [fail,emsg] = MyoMex.myo_mex_delete;
       assert(~fail,...
         'myo_mex delete failed with message:\n\t''%s''',emsg);
@@ -121,6 +124,11 @@ classdef MyoMex < handle
     end
     
     %% --- Setters
+    function set.deleteFcn(this,val)
+      assert( (isa(val,'function_handle') && 2==nargin(val)) || isempty(val),...
+        'Property ''deleteFcn'' must be a function handle with two input arguments or the empty matrix.');
+      this.deleteFcn = val;
+    end
     
     %% --- Dependent Getters
     function val = get.currTime(this)
@@ -179,11 +187,28 @@ classdef MyoMex < handle
       %   should manage the MyoMex lifetime around scenarios in which the
       %   Myo is being utilized by the user.
       [fail,emsg,data] = this.myo_mex_get_streaming_data();
-      if fail, this.delete(); end
+      if fail
+        this.fatalErrorSource = 'timerStreamingDataCallback';
+        this.delete();
+      end
       assert(~fail,...
         'myo_mex get_streaming_data failed with message\n\t''%s''\n%s',emsg,...
         sprintf('MyoMex has been cleaned up and destroyed.'));
       this.myoData.addData(data,this.currTime);
+    end
+    
+    function onDelete(this)
+      % onDelete  Calls deleteFcn from within the delete method
+      %   Use the fatalErrorSource field of the evt structure to determine
+      %   the cause of object destruction.
+      %
+      %   timerStreamingDataCallback
+      %     Failure in timerStreamingData during call to get_streaming_data
+      evt.fatalErrorSource = this.fatalErrorSource;
+      if ~isempty(this.deleteFcn) && ...
+          isa(this.deleteFcn,'function_handle')
+        this.deleteFcn(this,evt);
+      end
     end
   end
   
