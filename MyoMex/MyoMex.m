@@ -37,6 +37,7 @@ classdef MyoMex < handle
   properties
     deleteFcn = []
     newDataFcn = []
+    userData = []
   end
   properties (SetAccess = private)
     % myo_data  Data objects for physical Myo devices
