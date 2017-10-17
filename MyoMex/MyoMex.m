@@ -11,9 +11,9 @@ classdef MyoMex < handle
   % Example (minimal):
   %
   %  m = MyoMex(); % default expects one Myo paired with Myo Connect
-  %  pause(1);     % wait a second
-  %  m.myoData     % display the MyoData object
-  %  m.delete();   % destruct MyoMex (thus cleaning up myo_mex resources)
+  %  pause(1);     % wait a second m.myoData     % display the MyoData
+  %  object m.delete();   % destruct MyoMex (thus cleaning up myo_mex
+  %  resources)
   %
   % More Information:
   %
@@ -36,6 +36,7 @@ classdef MyoMex < handle
   
   properties
     deleteFcn = []
+    newDataFcn = []
   end
   properties (SetAccess = private)
     % myo_data  Data objects for physical Myo devices
@@ -130,6 +131,12 @@ classdef MyoMex < handle
       this.deleteFcn = val;
     end
     
+    function set.newDataFcn(this,val)
+      assert( (isa(val,'function_handle') && 2==nargin(val)) || isempty(val),...
+        'Property ''newDataFcn'' must be a function handle with two input arguments or the empty matrix.');
+      this.newDataFcn = val;
+    end
+    
     %% --- Dependent Getters
     function val = get.currTime(this)
       val = (now - this.nowInit)*24*60*60;
@@ -180,8 +187,8 @@ classdef MyoMex < handle
       %   Subsequently, the fetched data is sent into myoData for logging
       %   and future access.
       %
-      %   If an error is thrown by myo_mex during a call
-      %   into get_streaming_data, then the callback cleans up myo_mex and
+      %   If an error is thrown by myo_mex during a call into
+      %   get_streaming_data, then the callback cleans up myo_mex and
       %   MyoMex, thus invalidating this object. This is known to happen
       %   when a Myo device goes to sleep. Applications built on MyoMex
       %   should manage the MyoMex lifetime around scenarios in which the
@@ -195,6 +202,7 @@ classdef MyoMex < handle
         'myo_mex get_streaming_data failed with message\n\t''%s''\n%s',emsg,...
         sprintf('MyoMex has been cleaned up and destroyed.'));
       this.myoData.addData(data,this.currTime);
+      this.onNewData();
     end
     
     function onDelete(this)
@@ -208,6 +216,17 @@ classdef MyoMex < handle
       if ~isempty(this.deleteFcn) && ...
           isa(this.deleteFcn,'function_handle')
         this.deleteFcn(this,evt);
+      end
+    end
+    
+    function onNewData(this)
+      % onNewData  Calls newDataFcn from within the
+      % timerStreamingDataCallback method
+      %   This function should return very quickly since it's called with
+      %   every update of the Myo streaming data.
+      if ~isempty(this.newDataFcn) && ...
+          isa(this.newDataFcn,'function_handle')
+        this.newDataFcn(this,[]);
       end
     end
   end
@@ -304,8 +323,8 @@ classdef MyoMex < handle
       
       warning('MEX-file ''myo_mex'' is locked. Attemping to unlock and re-initialize.');
       
-      % see if delete brings us out of locked status
-      % this should work if myo_mex isn't in streaming mode
+      % see if delete brings us out of locked status this should work if
+      % myo_mex isn't in streaming mode
       [fail,emsg] = MyoMex.myo_mex_delete();
       if fail
         warning('myo_mex_delete failed with message:\n\t''%s''\n',emsg);
