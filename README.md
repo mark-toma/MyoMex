@@ -1,3 +1,28 @@
+# End of Life
+
+I'm humbled to see the overwhelming support and utility this project has contributed to so many users over the past 6+ years. There was actually one point when I began to search and tally the number of thesis/dissertation/conferences/journals that have cited this project... I gave up in the hundreds.
+
+But life goes on, I have moved on to new endeavors, and as you probably know, Thalmic Labs no longer exists to produce nor support Myo. Because of these factors, I will no longer be actively supporting MyoMex.
+
+## Myo SDK Redist
+
+As I recall (loosely), there are two things you need to use this project in addition to the MATLAB/Simulink dependencies:
+
+1.  Myo Connect
+2.  Myo SDK for Windows
+
+One user commented on MathWorks FEX that you may be able to find these using the [wayback machine](web.archive.org). This is what I was able to find. Unfortunately, it's proving difficult to locate the SDK download using this method.
+
+-   Myo Connect
+    -   [Wayback Machine page](https://web.archive.org/web/20160327215305/https://developer.thalmic.com/downloads)
+    -   [Myo Connect 1.0.1 Download](https://web.archive.org/web/20160327215305/https://s3.amazonaws.com/thalmicdownloads/windows/1.0.1/Myo+Connect+Installer.exe)
+
+However, if you use Google there may be better results.
+
+[Let me Google that for you...](https://lmgtfy.app/?q=%22myo-sdk-win-0.9.0%22)
+
+One of the top results here is another repo where you can find the required Windows dependencies. [Click here!](https://github.com/NiklasRosenstein/myo-python/releases)
+
 # Myo SDK MATLAB MEX Wrapper
 Access data from Thalmic Labs' Myo Gesture Control Armband in m-code!
 
